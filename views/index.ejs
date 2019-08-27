@@ -1,0 +1,16 @@
+<!--
+ * @Author: zhanglei
+ * @Date: 2019-07-15 15:50:39
+ * @LastEditors: zhanglei
+ * @LastEditTime: 2019-08-27 19:59:43
+ * @Description:
+ -->
+<% if (user) { %>
+    <h2><%= user.name %></h2>
+<% } %>
+<form action="/add" method="post">
+    <label for="myinput">输入id</label>
+    <input name="id" type="text">
+    <input type="submit" value="提交内容">
+</form>
+

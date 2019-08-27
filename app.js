@@ -1,3 +1,10 @@
+/*
+ * @Author: zhanglei
+ * @Date: 2019-07-15 15:50:39
+ * @LastEditors: zhanglei
+ * @LastEditTime: 2019-08-27 19:43:04
+ * @Description:
+ */
 const Koa = require('koa')
 const app = new Koa()
 const views = require('koa-views')
@@ -21,10 +28,10 @@ app.use(logger())
 app.use(require('koa-static')(__dirname + '/public'))
 
 app.use(views(__dirname + '/views', {
-  extension: 'pug'
+  extension: 'ejs'
 }))
 
-// logger
+// logger 控制台打印当前调用的方法、url、耗时
 app.use(async (ctx, next) => {
   const start = new Date()
   await next()
@@ -33,7 +40,7 @@ app.use(async (ctx, next) => {
 })
 
 // routes
-app.use(index.routes(), index.allowedMethods())
+app.use(index.routes(), index.allowedMethods())  // allowedMethods是路由方法，用来丰富http hedaer的信息
 app.use(users.routes(), users.allowedMethods())
 
 // error-handling
