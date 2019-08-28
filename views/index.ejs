@@ -2,20 +2,21 @@
  * @Author: zhanglei
  * @Date: 2019-07-15 15:50:39
  * @LastEditors: zhanglei
- * @LastEditTime: 2019-08-28 18:51:05
+ * @LastEditTime: 2019-08-28 19:55:49
  * @Description:
  -->
 <% if (user) { %>
     <h2><%= user.name %></h2>
 <% } %>
-<form action="/add" method="post">
+<form action="/add" method="post" target="ifr">
     <label for="myinput">测试插入数据-输入name</label>
     <input name="name" type="text">
     <input type="submit" value="提交内容">
 </form>
 
-<form action="/edit" method="post">
+<form action="/edit" method="post" target="ifr">
     <label>测试修改数据-更改name</label>
     <input name="name" type="text">
     <input type="submit" value="确认修改">
 </form>
+<iframe name='ifr' style="display:none;"></iframe>
