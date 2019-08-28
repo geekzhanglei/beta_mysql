@@ -2,12 +2,12 @@
  * @Author: zhanglei
  * @Date: 2019-07-15 15:50:39
  * @LastEditors: zhanglei
- * @LastEditTime: 2019-08-27 20:00:23
+ * @LastEditTime: 2019-08-28 19:41:57
  * @Description:
  */
 const router = require('koa-router')()
 const { query } = require('../utils/query');
-const { CREATE_TABLE, QUERY_TABLE } = require('../utils/sql');
+const { CREATE_TABLE, QUERY_TABLE, INSERT_TABLE, UPDATE_TABLE, DELETE_TABLE } = require('../utils/sql');
 
 router.get('/', async (ctx, next) => {
   await ctx.render('index', {
@@ -45,16 +45,37 @@ router.get('/use_database',async(ctx, next) => {
     ctx.body = data;
 })
 
+// 创建表
+router.get('/create_table',async(ctx, next) => {
+    let data = await query(CREATE_TABLE).then(res=>res).catch(err => err);
+    ctx.body = data;
+})
+
 // 查询数据
 router.get('/mysql', async(ctx,next)=>{
     let data = await query(QUERY_TABLE('blog_message_board_mark')).then(res => res).catch(err => err);
      ctx.body = data;
  })
  // 添加数据
- router.post('/add', async(ctx,next)=>{
-     let data = await query(INSERT_TABLE('my_item')).then(res => res).catch(err => err);
-      ctx.body = data;
-  })
+router.post('/add', async(ctx,next)=>{
+    let data = ctx.request.body;  // 获取post请求数据data
+    let res = await query(INSERT_TABLE('test', 'Name', data.name)).then(res => res).catch(err => err);
+    ctx.body = ctx.request.body;
+    console.log(res)
+})
 
+// 更改数据
+router.post('/edit', async(ctx,next)=>{
+    let data = ctx.request.body;  // 获取post请求数据data
+    let res = await query(UPDATE_TABLE('test', `id`, 20, 'Name', data.name)).then(res => res).catch(err => err);
+    ctx.body = ctx.request.body;
+})
+
+// 删除数据
+router.get('/delete', async(ctx,next)=>{
+    let delid = 20;
+    let res = await query(DELETE_TABLE('test', `id`, delid)).then(res => res).catch(err => err);
+    ctx.body = res;
+})
 
 module.exports = router
