@@ -2,7 +2,7 @@
  * @Author: zhanglei
  * @Date: 2019-07-15 15:50:39
  * @LastEditors: zhanglei
- * @LastEditTime: 2019-08-27 19:43:04
+ * @LastEditTime: 2019-09-02 19:41:40
  * @Description:
  */
 const Koa = require('koa')
@@ -15,6 +15,7 @@ const logger = require('koa-logger')
 
 const index = require('./routes/index')
 const users = require('./routes/users')
+const msg = require('./routes/msg')
 
 // error handler
 onerror(app)
@@ -42,6 +43,7 @@ app.use(async (ctx, next) => {
 // routes
 app.use(index.routes(), index.allowedMethods())  // allowedMethods是路由方法，用来丰富http hedaer的信息
 app.use(users.routes(), users.allowedMethods())
+app.use(msg.routes(), msg.allowedMethods())
 
 // error-handling
 app.on('error', (err, ctx) => {

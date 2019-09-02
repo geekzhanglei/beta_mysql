@@ -2,7 +2,7 @@
  * @Author: zhanglei
  * @Date: 2019-07-15 15:50:39
  * @LastEditors: zhanglei
- * @LastEditTime: 2019-08-28 19:41:57
+ * @LastEditTime: 2019-08-29 17:51:54
  * @Description:
  */
 const router = require('koa-router')()
@@ -61,7 +61,6 @@ router.post('/add', async(ctx,next)=>{
     let data = ctx.request.body;  // 获取post请求数据data
     let res = await query(INSERT_TABLE('test', 'Name', data.name)).then(res => res).catch(err => err);
     ctx.body = ctx.request.body;
-    console.log(res)
 })
 
 // 更改数据
