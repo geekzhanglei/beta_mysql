@@ -2,7 +2,7 @@
  * @Author: zhanglei
  * @Date: 2019-07-15 15:50:39
  * @LastEditors: zhanglei
- * @LastEditTime: 2019-09-03 18:14:21
+ * @LastEditTime: 2019-09-04 16:16:20
  * @Description:
  -->
 <% if (user) { %>
@@ -14,7 +14,7 @@
     <input type="submit" value="提交内容">
 </form>
 
-<form action="/edit" method="post" target="ifr">
+<form action="/blogapi/msg/replyadd" method="post" target="ifr">
     <label>测试修改数据-更改name</label>
     <input name="name" type="text">
     <input type="submit" value="确认修改">

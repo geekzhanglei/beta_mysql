@@ -2,11 +2,10 @@
  * @Author: zhanglei
  * @Date: 2019-09-02 17:28:31
  * @LastEditors: zhanglei
- * @LastEditTime: 2019-09-03 18:48:17
+ * @LastEditTime: 2019-09-04 19:35:37
  * @Description: 留言板接口 (message api)
  */
 const router = require('koa-router')();
-const moment = require('moment');
 
 const {
     query
@@ -42,7 +41,6 @@ router.get('/blogapi/msg', async (ctx, next) => {
     }
 
     let data = await query(QUERY_TABLE('blog_message_board_mark', startpage, pagesize, 'id')).then(res => res).catch(err => err);
-
     // 如果mysql执行出错
     if (data.errno) {
         status = 0; // 失败
@@ -52,10 +50,15 @@ router.get('/blogapi/msg', async (ctx, next) => {
         status = 1;
         rows = data.length;
     }
-
+    let res = data.map(e => {
+        e.created_at = Date.parse(e.created_at) / 1000;
+        e.updated_at = Date.parse(e.updated_at) / 1000;
+        e.reply = query(`SELECT * FROM blog_message_board_reply WHERE comment_id=${e.id}`).then(res => res).catch(err => err);
+        return e;
+    })
     ctx.body = {
         result: {
-            data,
+            data: res,
             status,
             rows,
             msg
@@ -74,27 +77,27 @@ router.post('/blogapi/msg/add', async (ctx, next) => {
     let data = ctx.request.body; // 获取post请求数据data
     let msg = 'success',
         status = 0,
-        agrees = 0;
+        agrees = 0,
+        obj = {},
+        sql, params, res;
     if (!data.username || !data.content) {
         msg = '必填项不可为空';
-        return;
-    }
-    let obj = {
-        username: data.username,
-        content: data.content,
-        agrees,
-        created_at: moment().format('YYYY-MM-DD HH:mm:ss'), // 使用moment库存入mysql时间戳
-        updated_at: moment().format('YYYY-MM-DD HH:mm:ss')
-    }
-    let sql = `INSERT INTO blog_message_board_mark (${Object.keys(obj)}) VALUES(?,?,?,?,?)`
-    let params = Object.values(obj);
-    let res = await query(sql, params).then(res => res).catch(err => err);
-    // 如果mysql执行出错
-    if (res.errno) {
-        status = 0; // 失败
-        msg = res.sqlMessage;
     } else {
-        status = 1;
+        obj = {
+            username: data.username,
+            content: data.content,
+            agrees
+        }
+        sql = `INSERT INTO blog_message_board_mark (${Object.keys(obj)}) VALUES(?,?,?)`
+        params = Object.values(obj);
+        res = await query(sql, params).then(res => res).catch(err => err);
+        // 如果mysql执行出错
+        if (res.errno) {
+            status = 0; // 失败
+            msg = res.sqlMessage;
+        } else {
+            status = 1;
+        }
     }
 
     ctx.body = {
@@ -138,8 +141,81 @@ router.post('/blogapi/msg/delete', async (ctx) => {
         }
     };
 })
+/**
+ * @description: 回复留言
+ * @param {string} username
+ * @param {string} content
+ * @param {string} comment_id
+ * @return: {obj} result
+ */
+router.post('/blogapi/msg/replyadd', async (ctx, next) => {
+    let req = ctx.request.body; // 获取post请求数据req
+    let msg = 'success',
+        status = 0,
+        obj = {},
+        sql, params, data;
+    if (!req.username || !req.content || !req.comment_id) {
+        msg = '必填项不可为空';
+    } else {
+        obj = {
+            username: req.username,
+            content: req.content,
+            comment_id: req.comment_id
+        }
+        sql = `INSERT INTO blog_message_board_reply (${Object.keys(obj)}) VALUES(?,?,?)`
+        params = Object.values(obj);
+        data = await query(sql, params).then(res => res).catch(err => err);
+        // 如果mysql执行出错
+        if (data.errno) {
+            status = 0; // 失败
+            msg = data.sqlMessage;
+        } else {
+            status = 1;
+        }
+    }
 
+    ctx.body = {
+        result: {
+            msg,
+            status
+        }
+    };
+})
+/**
+ * @description: 点赞留言
+ * @param {string} comment_id
+ * @return: {obj} result
+ */
+router.get('/blogapi/msg/agree', async (ctx, next) => {
+    let req = ctx.request.query; // 获取post请求数据req
+    let msg = 'success',
+        status = 0,
+        obj = {},
+        sql, data;
+    if (!req.comment_id) {
+        msg = '必填项不可为空';
+    } else {
+        obj = {
+            id: req.comment_id
+        }
+        sql = `UPDATE blog_message_board_mark SET agrees=agrees+1 where id = ${obj.id}`
+        data = await query(sql).then(res => res).catch(err => err);
+        // 如果mysql执行出错
+        if (data.errno) {
+            status = 0; // 失败
+            msg = data.sqlMessage;
+        } else {
+            status = 1;
+        }
+    }
 
+    ctx.body = {
+        result: {
+            msg,
+            status
+        }
+    };
+})
 
 
 
