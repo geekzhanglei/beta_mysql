@@ -2,8 +2,8 @@
  * @Author: zhanglei
  * @Date: 2019-07-19 16:04:51
  * @LastEditors: zhanglei
- * @LastEditTime: 2019-09-03 17:05:46
- * @Description:
+ * @LastEditTime: 2019-09-05 17:14:14
+ * @Description: 部分通用sql
  */
 
 // 查询数据表,分页，根据orderitem降序

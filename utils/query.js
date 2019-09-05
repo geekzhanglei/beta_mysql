@@ -2,8 +2,8 @@
  * @Author: zhanglei
  * @Date: 2019-07-19 15:58:47
  * @LastEditors: zhanglei
- * @LastEditTime: 2019-08-27 11:28:41
- * @Description:
+ * @LastEditTime: 2019-09-05 17:13:59
+ * @Description: 封装查询语句
  */
 const mysql = require('mysql')
 const MYSQL_CONFIG = require('../config/mysql_config') // 数据库配置

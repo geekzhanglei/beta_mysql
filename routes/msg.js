@@ -2,7 +2,7 @@
  * @Author: zhanglei
  * @Date: 2019-09-02 17:28:31
  * @LastEditors: zhanglei
- * @LastEditTime: 2019-09-04 19:35:37
+ * @LastEditTime: 2019-09-05 17:40:09
  * @Description: 留言板接口 (message api)
  */
 const router = require('koa-router')();
@@ -12,10 +12,10 @@ const {
 } = require('../utils/query');
 const {
     QUERY_TABLE,
-    INSERT_TABLE,
-    UPDATE_TABLE,
     DELETE_TABLE
 } = require('../utils/sql');
+
+router.prefix('/blogapi/msg') // 路由前缀，用来访问localhost:3000/blogapi/msg 这样的路径
 
 /**
  * @description: 留言板分页查询
@@ -25,7 +25,7 @@ const {
  * @return {Object} result
  */
 
-router.get('/blogapi/msg', async (ctx, next) => {
+router.get('/', async (ctx, next) => {
     let startpage = 0;
     let curpage = ctx.request.query.curpage,
         pagesize = ctx.request.query.pagesize;
@@ -40,22 +40,56 @@ router.get('/blogapi/msg', async (ctx, next) => {
         pagesize = 10;
     }
 
-    let data = await query(QUERY_TABLE('blog_message_board_mark', startpage, pagesize, 'id')).then(res => res).catch(err => err);
+    let data = await query(
+            QUERY_TABLE('blog_message_board_mark', startpage, pagesize, 'id')
+        )
+        .then(res => res)
+        .catch(err => err);
+
+    // 根据queryid查询reply数据
+    let queryid = [];
+    data.forEach(e => {
+        queryid.push(e.id);
+    });
+
+    let data2 = await query(
+            `SELECT * FROM blog_message_board_reply WHERE comment_id in(${queryid})`
+        )
+        .then(res => res)
+        .catch(err => err);
+
     // 如果mysql执行出错
-    if (data.errno) {
+    if (data.errno || data2.error) {
         status = 0; // 失败
         rows = 0;
-        msg = data.sqlMessage;
+        msg = data.sqlMessage || data2.sqlMessage;
     } else {
         status = 1;
         rows = data.length;
     }
+    // 整理data2返回数据
+    let data2res = {};
+    data2.forEach(e => {
+        e = {
+            commentId: e.comment_id,
+            replyUserName: e.username,
+            content: e.content,
+            createTime: Date.parse(e.created_at) / 1000
+        };
+        if (data2res[e.commentId]) {
+            data2res[e.commentId].push(e);
+        } else {
+            data2res[e.commentId] = [];
+            data2res[e.commentId].push(e);
+        }
+    });
+
     let res = data.map(e => {
         e.created_at = Date.parse(e.created_at) / 1000;
         e.updated_at = Date.parse(e.updated_at) / 1000;
-        e.reply = query(`SELECT * FROM blog_message_board_reply WHERE comment_id=${e.id}`).then(res => res).catch(err => err);
+        e.reply = data2res[e.id];
         return e;
-    })
+    });
     ctx.body = {
         result: {
             data: res,
@@ -64,7 +98,7 @@ router.get('/blogapi/msg', async (ctx, next) => {
             msg
         }
     };
-})
+});
 
 /**
  * @description: 留言板新增数据接口
@@ -73,13 +107,15 @@ router.get('/blogapi/msg', async (ctx, next) => {
  * @type post
  * @return:{object} result
  */
-router.post('/blogapi/msg/add', async (ctx, next) => {
+router.post('/add', async (ctx, next) => {
     let data = ctx.request.body; // 获取post请求数据data
     let msg = 'success',
         status = 0,
         agrees = 0,
         obj = {},
-        sql, params, res;
+        sql,
+        params,
+        res;
     if (!data.username || !data.content) {
         msg = '必填项不可为空';
     } else {
@@ -87,10 +123,14 @@ router.post('/blogapi/msg/add', async (ctx, next) => {
             username: data.username,
             content: data.content,
             agrees
-        }
-        sql = `INSERT INTO blog_message_board_mark (${Object.keys(obj)}) VALUES(?,?,?)`
+        };
+        sql = `INSERT INTO blog_message_board_mark (${Object.keys(
+            obj
+        )}) VALUES(?,?,?)`;
         params = Object.values(obj);
-        res = await query(sql, params).then(res => res).catch(err => err);
+        res = await query(sql, params)
+            .then(res => res)
+            .catch(err => err);
         // 如果mysql执行出错
         if (res.errno) {
             status = 0; // 失败
@@ -106,14 +146,14 @@ router.post('/blogapi/msg/add', async (ctx, next) => {
             status
         }
     };
-})
+});
 
 /**
  * @description: 留言板留言删除接口
  * @param {type} id
  * @return:
  */
-router.post('/blogapi/msg/delete', async (ctx) => {
+router.post('/delete', async ctx => {
     let status = 0,
         msg = 'success',
         res;
@@ -123,14 +163,16 @@ router.post('/blogapi/msg/delete', async (ctx) => {
     if (!id || !token || fetoken !== token) {
         msg = '参数校验失败';
     } else {
-        res = await query(DELETE_TABLE('blog_message_board_mark', 'id', id)).then(res => res).catch(err => err);
+        res = await query(DELETE_TABLE('blog_message_board_mark', 'id', id))
+            .then(res => res)
+            .catch(err => err);
         // 如果mysql执行出错
         if (res.errno) {
             status = 0; // 失败
             msg = res.sqlMessage;
         } else {
             status = 1;
-            msg = '删除成功'
+            msg = '删除成功';
         }
     }
 
@@ -140,7 +182,7 @@ router.post('/blogapi/msg/delete', async (ctx) => {
             status
         }
     };
-})
+});
 /**
  * @description: 回复留言
  * @param {string} username
@@ -148,12 +190,14 @@ router.post('/blogapi/msg/delete', async (ctx) => {
  * @param {string} comment_id
  * @return: {obj} result
  */
-router.post('/blogapi/msg/replyadd', async (ctx, next) => {
+router.post('/replyadd', async (ctx, next) => {
     let req = ctx.request.body; // 获取post请求数据req
     let msg = 'success',
         status = 0,
         obj = {},
-        sql, params, data;
+        sql,
+        params,
+        data;
     if (!req.username || !req.content || !req.comment_id) {
         msg = '必填项不可为空';
     } else {
@@ -161,10 +205,14 @@ router.post('/blogapi/msg/replyadd', async (ctx, next) => {
             username: req.username,
             content: req.content,
             comment_id: req.comment_id
-        }
-        sql = `INSERT INTO blog_message_board_reply (${Object.keys(obj)}) VALUES(?,?,?)`
+        };
+        sql = `INSERT INTO blog_message_board_reply (${Object.keys(
+            obj
+        )}) VALUES(?,?,?)`;
         params = Object.values(obj);
-        data = await query(sql, params).then(res => res).catch(err => err);
+        data = await query(sql, params)
+            .then(res => res)
+            .catch(err => err);
         // 如果mysql执行出错
         if (data.errno) {
             status = 0; // 失败
@@ -180,26 +228,29 @@ router.post('/blogapi/msg/replyadd', async (ctx, next) => {
             status
         }
     };
-})
+});
 /**
  * @description: 点赞留言
  * @param {string} comment_id
  * @return: {obj} result
  */
-router.get('/blogapi/msg/agree', async (ctx, next) => {
+router.get('/agree', async (ctx, next) => {
     let req = ctx.request.query; // 获取post请求数据req
     let msg = 'success',
         status = 0,
         obj = {},
-        sql, data;
+        sql,
+        data;
     if (!req.comment_id) {
         msg = '必填项不可为空';
     } else {
         obj = {
             id: req.comment_id
-        }
-        sql = `UPDATE blog_message_board_mark SET agrees=agrees+1 where id = ${obj.id}`
-        data = await query(sql).then(res => res).catch(err => err);
+        };
+        sql = `UPDATE blog_message_board_mark SET agrees=agrees+1 where id = ${obj.id}`;
+        data = await query(sql)
+            .then(res => res)
+            .catch(err => err);
         // 如果mysql执行出错
         if (data.errno) {
             status = 0; // 失败
@@ -215,8 +266,6 @@ router.get('/blogapi/msg/agree', async (ctx, next) => {
             status
         }
     };
-})
+});
 
-
-
-module.exports = router
+module.exports = router;
