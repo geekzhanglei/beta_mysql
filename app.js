@@ -16,6 +16,7 @@ const logger = require('koa-logger')
 const index = require('./routes/index')
 const article = require('./routes/article')
 const msg = require('./routes/msg')
+const login = require('./routes/login')
 
 // error handler
 onerror(app)
@@ -44,6 +45,7 @@ app.use(async (ctx, next) => {
 app.use(index.routes(), index.allowedMethods()) // allowedMethods是路由方法，用来丰富http hedaer的信息
 app.use(article.routes(), article.allowedMethods())
 app.use(msg.routes(), msg.allowedMethods())
+app.use(login.routes(), login.allowedMethods())
 
 // error-handling
 app.on('error', (err, ctx) => {
