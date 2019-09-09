@@ -3,15 +3,15 @@ const {
     query
 } = require('../utils/query');
 
-router.prefix('/blogapi/login');
+router.prefix('/blogapi/admin/');
 
 /**
  * @description: 登录接口
  * @param {username} 用户名
  * @param {password} 密码
- * @return {} result 
+ * @return {} result
  */
-router.post('/', async ctx => {
+router.post('/login', async ctx => {
     let status = 0,
         msg = 'success',
         res,
@@ -37,6 +37,24 @@ router.post('/', async ctx => {
                 status = 1;
                 msg = '登录成功';
                 token = res.password;
+
+                // 登录成功，写入登录日志表
+                var obj = {
+                    user_id: 1,
+                    token,
+                    expires: 604800,
+                    status: 1
+                }
+                var logsql = `INSERT INTO blog_admin_login_log (${Object.keys(obj)}) VALUES (?,?,?,?)`;
+                var params = Object.values(obj);
+                var logres = await query(logsql,params)
+                    .then(res => res)
+                    .catch(err => err);
+                if(logres.errno) {
+                    msg = logres.sqlMessage;
+                    status = 0;
+                }
+
             } else {
                 status = 0;
                 msg = '用户名或密码错误';
@@ -57,7 +75,7 @@ router.post('/', async ctx => {
  * @description: 判断是否登录
  * @param {token} token
  * @type {get}
- * @return {} result 
+ * @return {} result
  */
 
  router.get('/isLogin', async ctx => {
@@ -69,7 +87,7 @@ router.post('/', async ctx => {
     if (!token) {
         msg = '必填项不可为空';
     } else {
-        sql = `SELECT * FROM blog_admin_user`;
+        sql = `SELECT * FROM blog_admin_login_log ORDER BY id DESC LIMIT 1`;
         data = await query(sql)
             .then(res => res)
             .catch(err => err);
@@ -79,9 +97,10 @@ router.post('/', async ctx => {
             msg = data.sqlMessage;
         } else {
             data = data[0];
-            if(data.password === token) {
+            var timeout=new Date().getTime() - Date.parse(data.login_time);
+            if(data.status == 1 && timeout <= data.expires) {
                 status = 1;
-                msg = '已登录'
+                msg = '已登录';
             } else {
                 status = 0;
                 msg = '未登录';
@@ -100,7 +119,7 @@ router.post('/', async ctx => {
  /**
  * @description: 获取用户信息
  * @type {get}
- * @return {} result 
+ * @return {} result
  */
 
 router.get('/adminInfo', async ctx => {
@@ -108,7 +127,7 @@ router.get('/adminInfo', async ctx => {
         status = 0,
         sql = `SELECT * FROM blog_admin_user`,
         data;
-    
+
         data = await query(sql)
             .then(res => res)
             .catch(err => err);
