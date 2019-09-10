@@ -1,4 +1,13 @@
+/*
+ * @Author: zhanglei
+ * @Date: 2019-09-09 15:21:14
+ * @LastEditors: zhanglei
+ * @LastEditTime: 2019-09-10 16:16:17
+ * @Description: 登录有关接口
+ */
 const router = require('koa-router')()
+const moment = require('moment');
+
 const {
     query
 } = require('../utils/query');
@@ -82,8 +91,8 @@ router.post('/login', async ctx => {
     let token = ctx.request.query.token; // 获取post请求数据req
     let msg = 'success',
         status = 0,
-        sql,
-        data;
+        sql,updateSql,
+        data,res;
     if (!token) {
         msg = '必填项不可为空';
     } else {
@@ -101,9 +110,29 @@ router.post('/login', async ctx => {
             if(data.status == 1 && timeout <= data.expires) {
                 status = 1;
                 msg = '已登录';
-            } else {
+            }
+            if(data.status === 1 && timeout > data.expires) {
+                // 更新log记录
+                obj = {
+                    expires: 604800,
+                    status: 2,  // 2表示下线状态
+                    token
+                }
+                updateSql = `INSERT INTO blog_admin_login_log (${Object.keys(obj)}) VALUES (?,?,?)`;
+                params = Object.values(obj);
+                res = await query(sql,params)
+                            .then(res => res)
+                            .catch(err => err);
                 status = 0;
-                msg = '未登录';
+                if(res.errno) {
+                    msg = data.sqlMessage;
+                } else {
+                    msg = '登录过期';
+                }
+            }
+            if(data.status === 2) {
+                status = 0;
+                msg = '当前未登录';
             }
         }
     }
@@ -117,35 +146,41 @@ router.post('/login', async ctx => {
  });
 
  /**
- * @description: 获取用户信息
- * @type {get}
- * @return {} result
- */
-
-router.get('/adminInfo', async ctx => {
-    let msg = 'success',
-        status = 0,
-        sql = `SELECT * FROM blog_admin_user`,
-        data;
-
-        data = await query(sql)
+  * @description: 登出
+  * @param {get}
+  * @param {token}
+  * @return: {}
+  */
+ router.get('/loginout', async ctx => {
+    let status = 0,
+        msg = 'success',
+        res,
+        token = ctx.request.query.token;
+    if (!token) {
+        msg = '必填项不可为空';
+    } else {
+        let sql = `UPDATE blog_admin_login_log SET status=\'2\',exit_time=\'${moment().format('YYYY-MM-DD HH:MM:SS')}\' ORDER BY id DESC LIMIT 1`;
+        res = await query(sql)
             .then(res => res)
             .catch(err => err);
         // 如果mysql执行出错
-        if (data.errno) {
+        if (res.errno) {
             status = 0; // 失败
-            msg = data.sqlMessage;
+            msg = res.sqlMessage;
         } else {
-            data = data[0];
             status = 1;
+            msg = '退出登录成功';
         }
+    }
 
     ctx.body = {
         result: {
             msg,
-            status
+            status,
+            token
         }
     };
- });
+});
+
 
 module.exports = router;
