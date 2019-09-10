@@ -2,7 +2,7 @@
  * @Author: zhanglei
  * @Date: 2019-09-04 15:10:02
  * @LastEditors: zhanglei
- * @LastEditTime: 2019-09-05 18:46:22
+ * @LastEditTime: 2019-09-10 20:04:42
  * @Description:
  -->
 
@@ -266,3 +266,66 @@ GET: /blogapi/article/detail
     }
 }
 ```
+## 登录相关
+### 1. 登录
+
+```
+POST: blogapi/admin/login
+```
+
+#### 请求参数
+
+| 字段名   | 类型 | 说明     |
+| -------- | ---- | -------- |
+| username  | str  | 用户名   |
+| password | str | 密码 |
+
+### 2. 是否登录
+```
+GET: blogapi/admin/isLogin
+```
+
+#### 请求参数
+
+| 字段名   | 类型 | 说明     |
+| -------- | ---- | -------- |
+| token  | token  | 鉴权   |
+
+### 3. 登出
+```
+GET: blogapi/admin/loginout
+```
+
+#### 请求参数
+
+| 字段名   | 类型 | 说明     |
+| -------- | ---- | -------- |
+| token  | token  | 鉴权   |
+
+## 用户信息相关
+### 1. 获取用户信息
+```
+GET: blogapi/admin/adminInfo
+```
+### 2. 修改用户密码
+```
+POST: blogapi/admin/modifypw
+```
+#### 请求参数
+
+| 字段名   | 类型 | 说明     |
+| -------- | ---- | -------- |
+| password  | str  | 旧密码   |
+| newpassword  | str  | 新密码   |
+| token  | str  | 鉴权   |
+
+### 3. 修改用户信息
+```
+POST: blogapi/admin/modifyAdminInfo
+```
+#### 请求参数
+| 字段名   | 类型 | 说明     |
+| -------- | ---- | -------- |
+| nickname  | str  | 用户昵称   |
+| headimg  | file  | 头像   |
+| token  | str  | 鉴权   |
