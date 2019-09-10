@@ -2,7 +2,7 @@
  * @Author: zhanglei
  * @Date: 2019-07-15 15:50:39
  * @LastEditors: zhanglei
- * @LastEditTime: 2019-09-05 17:13:41
+ * @LastEditTime: 2019-09-10 16:26:28
  * @Description: 首页
  */
 const Koa = require('koa')
@@ -14,6 +14,7 @@ const bodyparser = require('koa-bodyparser')
 const logger = require('koa-logger')
 
 const index = require('./routes/index')
+const user = require('./routes/user')
 const article = require('./routes/article')
 const msg = require('./routes/msg')
 const login = require('./routes/login')
@@ -44,6 +45,7 @@ app.use(async (ctx, next) => {
 // routes
 app.use(index.routes(), index.allowedMethods()) // allowedMethods是路由方法，用来丰富http hedaer的信息
 app.use(article.routes(), article.allowedMethods())
+app.use(user.routes(), user.allowedMethods())
 app.use(msg.routes(), msg.allowedMethods())
 app.use(login.routes(), login.allowedMethods())
 

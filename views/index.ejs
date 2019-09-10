@@ -2,7 +2,7 @@
  * @Author: zhanglei
  * @Date: 2019-07-15 15:50:39
  * @LastEditors: zhanglei
- * @LastEditTime: 2019-09-05 18:59:24
+ * @LastEditTime: 2019-09-10 17:30:45
  * @Description:
  -->
 <% if (user) { %>
@@ -14,10 +14,18 @@
     <input type="submit" value="提交内容">
 </form>
 
-<form action="/blogapi/admin/login" method="post" target="ifr">
-    <label>登录</label>
-    <input name="username" type="text">
+<form action="/blogapi/admin/modifypw" method="post" target="ifr">
+    <label>修改密码</label>
     <input name="password" type="text">
-    <input type="submit" value="登录">
+    <input name="newpassword" type="text">
+    <input type="text" name="token" value="dGVzdGJsb2c=">
+    <input type="submit" value="修改密码">
+</form>
+<form action="/blogapi/admin/modifyAdminInfo" method="post" target="ifr">
+    <label>上传图片</label>
+    <input name="nickname" type="text" placeholder='nickname'>
+    <input type="file" name="headimg">
+    <input type="text" name="token" value="dGVzdGJsb2c=">
+    <input type="submit" value="上传图片">
 </form>
 <!-- <iframe name='ifr' style="display:none;"></iframe> -->
