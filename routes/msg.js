@@ -2,10 +2,11 @@
  * @Author: zhanglei
  * @Date: 2019-09-02 17:28:31
  * @LastEditors: zhanglei
- * @LastEditTime: 2019-09-05 17:40:09
+ * @LastEditTime: 2019-09-11 17:02:35
  * @Description: 留言板接口 (message api)
  */
 const router = require('koa-router')();
+const blogConfig = require('../config/option_config');
 
 const {
     query

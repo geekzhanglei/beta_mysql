@@ -2,10 +2,12 @@
  * @Author: zhanglei
  * @Date: 2019-07-15 15:50:39
  * @LastEditors: zhanglei
- * @LastEditTime: 2019-09-05 19:04:07
+ * @LastEditTime: 2019-09-11 17:04:51
  * @Description: 文章接口
  */
 const router = require('koa-router')()
+const blogConfig = require('../config/option_config');
+
 const {
     query
 } = require('../utils/query');
@@ -35,7 +37,7 @@ router.get('/', async (ctx, next) => {
         pagesize = 10;
     }
     let sql;
-    if (!ctx.request.query.curpage && !ctx.request.query.pagesize) {
+    if (!ctx.request.query.curpage || !ctx.request.query.pagesize) {
         sql = `SELECT id,created_at,introduction,title,username FROM blog_articles  ORDER BY id DESC`;
     } else {
         sql = `SELECT id,created_at,introduction,title,username FROM blog_articles  ORDER BY id DESC LIMIT ${startpage},${pagesize}`;

@@ -2,7 +2,7 @@
  * @Author: zhanglei
  * @Date: 2019-07-15 15:50:39
  * @LastEditors: zhanglei
- * @LastEditTime: 2019-09-10 16:26:28
+ * @LastEditTime: 2019-09-11 15:35:45
  * @Description: 首页
  */
 const Koa = require('koa')
@@ -18,6 +18,10 @@ const user = require('./routes/user')
 const article = require('./routes/article')
 const msg = require('./routes/msg')
 const login = require('./routes/login')
+const admincomments = require('./routes/admincomments')
+const adminmsg = require('./routes/adminmsg')
+const adminoption = require('./routes/adminoption')
+
 
 // error handler
 onerror(app)
@@ -48,6 +52,9 @@ app.use(article.routes(), article.allowedMethods())
 app.use(user.routes(), user.allowedMethods())
 app.use(msg.routes(), msg.allowedMethods())
 app.use(login.routes(), login.allowedMethods())
+app.use(admincomments.routes(), admincomments.allowedMethods())
+app.use(adminmsg.routes(), adminmsg.allowedMethods())
+app.use(adminoption.routes(), adminoption.allowedMethods())
 
 // error-handling
 app.on('error', (err, ctx) => {
