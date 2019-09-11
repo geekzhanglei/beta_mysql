@@ -2,7 +2,7 @@
  * @Author: zhanglei
  * @Date: 2019-07-15 15:50:39
  * @LastEditors: zhanglei
- * @LastEditTime: 2019-09-11 17:04:51
+ * @LastEditTime: 2019-09-11 17:14:47
  * @Description: 文章接口
  */
 const router = require('koa-router')()
@@ -17,7 +17,6 @@ router.prefix('/blogapi/article') // 路由前缀，用来访问localhost:3000/u
 /**
  * @description: 文章分页查询
  * @param {curpage} 当前页
- * @param {pagesize} 每页条数
  * @type {get}
  * @return {Object} result
  */
@@ -25,22 +24,23 @@ router.prefix('/blogapi/article') // 路由前缀，用来访问localhost:3000/u
 router.get('/', async (ctx, next) => {
     let startpage = 0;
     let curpage = ctx.request.query.curpage,
-        pagesize = ctx.request.query.pagesize;
+        pagesize = blogConfig.articlePerPage;
     let status = 1,
         msg = 'success';
     let rows = 0; // 数据条数
     // 参数校验
     if (parseInt(curpage) > 0 && parseInt(curpage) == curpage) {
         startpage = (curpage - 1) * pagesize;
-    }
-    if (parseInt(pagesize) < 0 || parseInt(pagesize) != pagesize) {
-        pagesize = 10;
-    }
-    let sql;
-    if (!ctx.request.query.curpage || !ctx.request.query.pagesize) {
-        sql = `SELECT id,created_at,introduction,title,username FROM blog_articles  ORDER BY id DESC`;
     } else {
+        curpage = 1;
+        startpage = 0;
+    }
+
+    let sql;
+    if (blogConfig.articleIsPage) {  // 分页
         sql = `SELECT id,created_at,introduction,title,username FROM blog_articles  ORDER BY id DESC LIMIT ${startpage},${pagesize}`;
+    } else {  // 不分页
+        sql = `SELECT id,created_at,introduction,title,username FROM blog_articles  ORDER BY id DESC`;
     }
     let data = await query(sql)
         .then(res => res)
@@ -63,6 +63,7 @@ router.get('/', async (ctx, next) => {
         result: {
             data: res,
             status,
+            isPagination: blogConfig.articleIsPage ? true: false,
             rows,
             msg
         }
@@ -146,7 +147,7 @@ router.get('/detail', async ctx => {
 })
 
 /**
- * @description: 文章评论上传
+ * @description: 添加文章评论
  * @param {articleId} 文章id
  * @param {nickname} 昵称
  * @param {email}

@@ -2,7 +2,7 @@
  * @Author: zhanglei
  * @Date: 2019-09-04 15:10:02
  * @LastEditors: zhanglei
- * @LastEditTime: 2019-09-10 20:04:42
+ * @LastEditTime: 2019-09-11 17:15:19
  * @Description:
  -->
 
@@ -25,7 +25,6 @@ GET： /blogapi/msg?curpage=1&pagesize=2
 | 字段名   | 类型 | 说明     |
 | -------- | ---- | -------- |
 | curpage  | int  | 当前页   |
-| pagesize | int  | 每页条数 |
 
 #### 响应
 
@@ -166,7 +165,6 @@ GET: blogapi/article
 | 字段名   | 类型 | 说明     |
 | -------- | ---- | -------- |
 | curpage  | int  | 当前页   |
-| pagesize | int  | 每页条数 |
 
 不写参数表示不分页
 
@@ -193,6 +191,7 @@ GET: blogapi/article
         ],
         "status": 1,
         "rows": 2,
+        "isPagination": false,
         "msg": "success"
     }
 }

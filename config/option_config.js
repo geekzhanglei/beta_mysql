@@ -2,7 +2,7 @@
  * @Author: zhanglei
  * @Date: 2019-09-11 16:53:53
  * @LastEditors: zhanglei
- * @LastEditTime: 2019-09-11 16:56:13
+ * @LastEditTime: 2019-09-11 17:22:03
  * @Description: 业务配置-博客基本选项标识
  */
 const blogConfig = {

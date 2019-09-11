@@ -2,7 +2,7 @@
  * @Author: zhanglei
  * @Date: 2019-09-02 17:28:31
  * @LastEditors: zhanglei
- * @LastEditTime: 2019-09-11 17:02:35
+ * @LastEditTime: 2019-09-11 17:26:05
  * @Description: 留言板接口 (message api)
  */
 const router = require('koa-router')();
@@ -12,7 +12,6 @@ const {
     query
 } = require('../utils/query');
 const {
-    QUERY_TABLE,
     DELETE_TABLE
 } = require('../utils/sql');
 
@@ -21,7 +20,6 @@ router.prefix('/blogapi/msg') // 路由前缀，用来访问localhost:3000/bloga
 /**
  * @description: 留言板分页查询
  * @param {number} curpage
- * @param {number} pagesize
  * @type {get}
  * @return {Object} result
  */
@@ -29,21 +27,25 @@ router.prefix('/blogapi/msg') // 路由前缀，用来访问localhost:3000/bloga
 router.get('/', async (ctx, next) => {
     let startpage = 0;
     let curpage = ctx.request.query.curpage,
-        pagesize = ctx.request.query.pagesize;
+        pagesize = blogConfig.msgPerPage;
     let status = 1,
         msg = 'success';
     let rows = 0; // 数据条数
     // 参数校验
     if (parseInt(curpage) > 0 && parseInt(curpage) == curpage) {
         startpage = (curpage - 1) * pagesize;
-    }
-    if (parseInt(pagesize) < 0 || parseInt(pagesize) != pagesize) {
-        pagesize = 10;
+    } else {
+        curpage = 1;
+        startpage = 0;
     }
 
-    let data = await query(
-            QUERY_TABLE('blog_message_board_mark', startpage, pagesize, 'id')
-        )
+    let sql;
+    if (blogConfig.msgIsPage) {  // 分页
+        sql = `SELECT * FROM blog_message_board_mark  ORDER BY id DESC LIMIT ${startpage},${pagesize}`;
+    } else {  // 不分页
+        sql = `SELECT * FROM blog_message_board_mark  ORDER BY id DESC`;
+    }
+    let data = await query(sql)
         .then(res => res)
         .catch(err => err);
 
@@ -95,6 +97,7 @@ router.get('/', async (ctx, next) => {
         result: {
             data: res,
             status,
+            isPagination: blogConfig.msgIsPage,
             rows,
             msg
         }
@@ -103,7 +106,7 @@ router.get('/', async (ctx, next) => {
 
 /**
  * @description: 留言板新增数据接口
- * @param {string} usrername
+ * @param {string} usrername 可选
  * @param {string} content
  * @type post
  * @return:{object} result
@@ -117,11 +120,11 @@ router.post('/add', async (ctx, next) => {
         sql,
         params,
         res;
-    if (!data.username || !data.content) {
+    if (!data.content) {
         msg = '必填项不可为空';
     } else {
         obj = {
-            username: data.username,
+            username: data.username || blogConfig.msgName,
             content: data.content,
             agrees
         };
@@ -186,7 +189,7 @@ router.post('/delete', async ctx => {
 });
 /**
  * @description: 回复留言
- * @param {string} username
+ * @param {string} username 可选
  * @param {string} content
  * @param {string} comment_id
  * @return: {obj} result
@@ -199,11 +202,11 @@ router.post('/replyadd', async (ctx, next) => {
         sql,
         params,
         data;
-    if (!req.username || !req.content || !req.comment_id) {
+    if (!req.content || !req.comment_id) {
         msg = '必填项不可为空';
     } else {
         obj = {
-            username: req.username,
+            username: req.username || blogConfig.msgReplyName,
             content: req.content,
             comment_id: req.comment_id
         };
