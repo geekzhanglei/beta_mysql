@@ -2,7 +2,7 @@
  * @Author: zhanglei
  * @Date: 2019-07-15 15:50:39
  * @LastEditors: zhanglei
- * @LastEditTime: 2019-09-11 17:14:47
+ * @LastEditTime: 2019-09-11 19:52:02
  * @Description: 文章接口
  */
 const router = require('koa-router')()
@@ -45,9 +45,13 @@ router.get('/', async (ctx, next) => {
     let data = await query(sql)
         .then(res => res)
         .catch(err => err);
-
+    let countsql = `SELECT COUNT(*) FROM blog_articles`;
+    let data2 = await query(countsql)
+        .then(res => res)
+        .catch(err => err);
+    console.log(data2)
     // 如果mysql执行出错
-    if (data.errno) {
+    if (data.errno || data2.errno) {
         status = 0; // 失败
         rows = 0;
         msg = data.sqlMessage;
@@ -64,8 +68,10 @@ router.get('/', async (ctx, next) => {
             data: res,
             status,
             isPagination: blogConfig.articleIsPage ? true: false,
-            rows,
-            msg
+            perpage: blogConfig.articlePerPage,
+            rows: data2[0]['COUNT(*)'],
+            perpage: blogConfig.articlePerPage,
+            msg,
         }
     };
 });

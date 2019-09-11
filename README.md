@@ -2,8 +2,8 @@
  * @Author: zhanglei
  * @Date: 2019-09-04 15:10:02
  * @LastEditors: zhanglei
- * @LastEditTime: 2019-09-11 17:15:19
- * @Description:
+ * @LastEditTime: 2019-09-11 17:34:49
+ * @Description: 接口文档
  -->
 
 # 重构后端接口服务
@@ -17,7 +17,7 @@
 ### 1. 查询留言
 
 ```
-GET： /blogapi/msg?curpage=1&pagesize=2
+GET： /blogapi/msg?curpage=1
 ```
 
 #### 请求参数
