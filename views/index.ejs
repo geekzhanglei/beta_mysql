@@ -2,7 +2,7 @@
  * @Author: zhanglei
  * @Date: 2019-07-15 15:50:39
  * @LastEditors: zhanglei
- * @LastEditTime: 2019-09-10 17:30:45
+ * @LastEditTime: 2019-09-16 11:38:21
  * @Description:
  -->
 <% if (user) { %>
@@ -10,22 +10,22 @@
 <% } %>
 <form action="/blogapi/article/delete" method="post" target="ifr">
     <label for="myinput">测试插入数据-输入name</label>
-    <input name="id" type="text">
-    <input type="submit" value="提交内容">
+    <input name="id" type="text" />
+    <input type="submit" value="提交内容" />
 </form>
 
 <form action="/blogapi/admin/modifypw" method="post" target="ifr">
     <label>修改密码</label>
-    <input name="password" type="text">
-    <input name="newpassword" type="text">
-    <input type="text" name="token" value="dGVzdGJsb2c=">
-    <input type="submit" value="修改密码">
+    <input name="password" type="text" />
+    <input name="newpassword" type="text" />
+    <input type="text" name="token" value="dGVzdGJsb2c=" />
+    <input type="submit" value="修改密码" />
 </form>
 <form action="/blogapi/admin/modifyAdminInfo" method="post" target="ifr">
     <label>上传图片</label>
-    <input name="nickname" type="text" placeholder='nickname'>
-    <input type="file" name="headimg">
-    <input type="text" name="token" value="dGVzdGJsb2c=">
-    <input type="submit" value="上传图片">
+    <input name="nickname" type="text" placeholder="nickname" />
+    <input type="file" name="headimg" />
+    <input type="text" name="token" value="dGVzdGJsb2c=" />
+    <input type="submit" value="上传图片" />
 </form>
 <!-- <iframe name='ifr' style="display:none;"></iframe> -->

@@ -2,7 +2,7 @@
  * @Author: zhanglei
  * @Date: 2019-09-04 15:10:02
  * @LastEditors: zhanglei
- * @LastEditTime: 2019-09-11 17:34:49
+ * @LastEditTime: 2019-09-12 18:23:51
  * @Description: 接口文档
  -->
 
@@ -22,9 +22,9 @@ GET： /blogapi/msg?curpage=1
 
 #### 请求参数
 
-| 字段名   | 类型 | 说明     |
-| -------- | ---- | -------- |
-| curpage  | int  | 当前页   |
+| 字段名  | 类型 | 说明   |
+| ------- | ---- | ------ |
+| curpage | int  | 当前页 |
 
 #### 响应
 
@@ -137,9 +137,10 @@ GET: /blogapi/msg/agree
 
 #### 请求参数
 
-| 字段名     | 类型 | 说明    |
-| ---------- | ---- | ------- |
-| comment_id | str  | 留言 id |
+| 字段名 | 类型 | 说明             |
+| ------ | ---- | ---------------- |
+| id     | str  | 留言 id          |
+| isAdd  | str  | 点赞还说取消点赞 |
 
 #### 响应
 
@@ -162,9 +163,9 @@ GET: blogapi/article
 
 #### 请求参数
 
-| 字段名   | 类型 | 说明     |
-| -------- | ---- | -------- |
-| curpage  | int  | 当前页   |
+| 字段名  | 类型 | 说明   |
+| ------- | ---- | ------ |
+| curpage | int  | 当前页 |
 
 不写参数表示不分页
 
@@ -265,7 +266,40 @@ GET: /blogapi/article/detail
     }
 }
 ```
+
+### 4. 添加文章评论
+
+```
+POST: /blogapi/article/marks/add
+```
+
+#### 请求参数
+
+| 字段名    | 类型 | 说明     | 备注 |
+| --------- | ---- | -------- | ---- |
+| articleId | str  | 文章 id  |
+| nickname  | str  | 用户昵称 |
+| content   | str  | 内容     |
+| email     | str  | 邮件     |
+| website   | str  | 网址     | 可选 |
+
+### 5. 增加文章
+
+```
+POST: /blogapi/article/release
+```
+
+#### 请求参数
+
+| 字段名       | 类型 | 说明 | 备注 |
+| ------------ | ---- | ---- | ---- |
+| token        | str  | 鉴权 |
+| title        | str  | 题目 |
+| content      | str  | 内容 |
+| introduction | str  | 摘要 |
+
 ## 登录相关
+
 ### 1. 登录
 
 ```
@@ -274,57 +308,95 @@ POST: blogapi/admin/login
 
 #### 请求参数
 
-| 字段名   | 类型 | 说明     |
-| -------- | ---- | -------- |
-| username  | str  | 用户名   |
-| password | str | 密码 |
+| 字段名   | 类型 | 说明   |
+| -------- | ---- | ------ |
+| username | str  | 用户名 |
+| password | str  | 密码   |
 
 ### 2. 是否登录
+
 ```
 GET: blogapi/admin/isLogin
 ```
 
 #### 请求参数
 
-| 字段名   | 类型 | 说明     |
-| -------- | ---- | -------- |
-| token  | token  | 鉴权   |
+| 字段名 | 类型  | 说明 |
+| ------ | ----- | ---- |
+| token  | token | 鉴权 |
 
 ### 3. 登出
+
 ```
 GET: blogapi/admin/loginout
 ```
 
 #### 请求参数
 
-| 字段名   | 类型 | 说明     |
-| -------- | ---- | -------- |
-| token  | token  | 鉴权   |
+| 字段名 | 类型  | 说明 |
+| ------ | ----- | ---- |
+| token  | token | 鉴权 |
 
 ## 用户信息相关
+
 ### 1. 获取用户信息
+
 ```
 GET: blogapi/admin/adminInfo
 ```
+
 ### 2. 修改用户密码
+
 ```
 POST: blogapi/admin/modifypw
 ```
+
 #### 请求参数
 
-| 字段名   | 类型 | 说明     |
-| -------- | ---- | -------- |
-| password  | str  | 旧密码   |
-| newpassword  | str  | 新密码   |
-| token  | str  | 鉴权   |
+| 字段名      | 类型 | 说明   |
+| ----------- | ---- | ------ |
+| password    | str  | 旧密码 |
+| newpassword | str  | 新密码 |
+| token       | str  | 鉴权   |
 
 ### 3. 修改用户信息
+
 ```
 POST: blogapi/admin/modifyAdminInfo
 ```
+
 #### 请求参数
+
 | 字段名   | 类型 | 说明     |
 | -------- | ---- | -------- |
-| nickname  | str  | 用户昵称   |
-| headimg  | file  | 头像   |
-| token  | str  | 鉴权   |
+| nickname | str  | 用户昵称 |
+| headimg  | file | 头像     |
+| token    | str  | 鉴权     |
+
+## 其他接口
+
+### 1. 带评论的文章分页查询
+
+```
+GET: /blogapi/admin/articlesWithMarks
+```
+
+#### 请求参数
+
+| 字段名   | 类型 | 说明     |
+| -------- | ---- | -------- |
+| curpage  | str  | 当前页   |
+| pagesize | str  | 每页条数 |
+
+### 2. 带评论的留言板分页查询
+
+```
+GET: /blogapi/admin/msgwithmarks
+```
+
+#### 请求参数
+
+| 字段名   | 类型 | 说明     |
+| -------- | ---- | -------- |
+| curpage  | str  | 当前页   |
+| pagesize | str  | 每页条数 |

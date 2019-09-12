@@ -9,7 +9,21 @@ const router = require('koa-router')()
 const blogConfig = require('../config/option_config');
 
 router.prefix('/blogapi/admin/');
-
+/**
+ * @description: 获取默认选项设置
+ * @type get
+ * @return:{object} result
+ */
+router.get('/options', async ctx => {
+    let msg = "success", status = 1;
+    ctx.body = {
+        result: {
+            msg,
+            status,
+            ...blogConfig
+        }
+    };
+});
 /**
  * @description: 设置默认文章页配置
  * @param {ispage} 是否分页
@@ -22,15 +36,14 @@ router.post('/setDefaultArticlePages', async (ctx, next) => {
     let data = ctx.request.body; // 获取post请求数据data
     let msg = 'success',
         status = 0;
-    if (!data.ispage || !data.perpage || !token) {
+    if (!data.ispage || !data.perpage || !data.token) {
         msg = '必填项不可为空';
     } else {
-        blogConfig.articleIsPage = data.ispage;
+        blogConfig.articleIsPage = data.ispage == 'true';
         blogConfig.articlePerPage = data.perpage;
         status = 1;
         msg = '修改成功';
     }
-
     ctx.body = {
         result: {
             msg,
@@ -53,10 +66,10 @@ router.post('/setDefaultCommentInfos', async (ctx, next) => {
     let data = ctx.request.body; // 获取post请求数据data
     let msg = 'success',
         status = 0;
-    if (!data.curpage || !data.perpage || !token) {
+    if (!data.ispage || !data.perpage || !data.token) {
         msg = '必填项不可为空';
     } else {
-        blogConfig.msgIsPage = data.ispage;
+        blogConfig.msgIsPage = data.ispage == 'true';
         blogConfig.msgPerPage = data.perpage;
         blogConfig.msgName = data.defaultCommentName;
         blogConfig.msgReplyName = data.defaultReplyName;

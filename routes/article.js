@@ -2,17 +2,16 @@
  * @Author: zhanglei
  * @Date: 2019-07-15 15:50:39
  * @LastEditors: zhanglei
- * @LastEditTime: 2019-09-11 19:52:02
+ * @LastEditTime: 2019-09-12 17:57:57
  * @Description: 文章接口
  */
-const router = require('koa-router')()
+const router = require('koa-router')();
 const blogConfig = require('../config/option_config');
 
-const {
-    query
-} = require('../utils/query');
+const { query } = require('../utils/query');
+const { DELETE_TABLE } = require('../utils/sql');
 
-router.prefix('/blogapi/article') // 路由前缀，用来访问localhost:3000/users 这样的路径
+router.prefix('/blogapi/article'); // 路由前缀，用来访问localhost:3000/users 这样的路径
 
 /**
  * @description: 文章分页查询
@@ -37,9 +36,11 @@ router.get('/', async (ctx, next) => {
     }
 
     let sql;
-    if (blogConfig.articleIsPage) {  // 分页
+    if (blogConfig.articleIsPage) {
+        // 分页
         sql = `SELECT id,created_at,introduction,title,username FROM blog_articles  ORDER BY id DESC LIMIT ${startpage},${pagesize}`;
-    } else {  // 不分页
+    } else {
+        // 不分页
         sql = `SELECT id,created_at,introduction,title,username FROM blog_articles  ORDER BY id DESC`;
     }
     let data = await query(sql)
@@ -49,7 +50,7 @@ router.get('/', async (ctx, next) => {
     let data2 = await query(countsql)
         .then(res => res)
         .catch(err => err);
-    console.log(data2)
+
     // 如果mysql执行出错
     if (data.errno || data2.errno) {
         status = 0; // 失败
@@ -67,11 +68,62 @@ router.get('/', async (ctx, next) => {
         result: {
             data: res,
             status,
-            isPagination: blogConfig.articleIsPage ? true: false,
+            isPagination: blogConfig.articleIsPage ? true : false,
             perpage: blogConfig.articlePerPage,
             rows: data2[0]['COUNT(*)'],
-            perpage: blogConfig.articlePerPage,
+            total: Math.ceil(data2[0]['COUNT(*)'] / blogConfig.articlePerPage),
+            msg
+        }
+    };
+});
+
+/**
+ * @description: 发表文章
+ * @param {token} 鉴权
+ * @param {title} 题目
+ * @param {introduction} 摘要
+ * @param {content} 内容
+ * @param {post}
+ * @return {obj} result
+ */
+router.post('/release', async ctx => {
+    let status = 0,
+        msg = 'success',
+        res,
+        sql,
+        obj = {};
+    let title = ctx.request.body.title,
+        introduction = ctx.request.body.introduction,
+        content = ctx.request.body.content,
+        token = ctx.request.body.token;
+    if (!title || !introduction || !content || !token) {
+        msg = '参数校验失败';
+    } else {
+        obj = {
+            title,
+            content,
+            introduction
+        };
+        sql = `INSERT INTO blog_articles (${Object.keys(obj)}) VALUES(?,?,?)`;
+        params = Object.values(obj);
+        res = await query(sql, params)
+            .then(res => res)
+            .catch(err => err);
+
+        // 如果mysql执行出错
+        if (res.errno) {
+            status = 0; // 失败
+            msg = res.sqlMessage;
+        } else {
+            status = 1;
+            msg = '文章插入成功';
+        }
+    }
+
+    ctx.body = {
+        result: {
             msg,
+            status
         }
     };
 });
@@ -86,9 +138,8 @@ router.post('/delete', async ctx => {
         msg = 'success',
         res;
     let id = ctx.request.body.id,
-        fetoken = ctx.request.body.token,
-        token = 'M2ZkNDRkY2JmMjFkNTlmOGRkZTNkZTIwZWI3MzNlNTBfMTgz';
-    if (!id || !token || fetoken !== token) {
+        token = ctx.request.body.token;
+    if (!id || !token) {
         msg = '参数校验失败';
     } else {
         res = await query(DELETE_TABLE('blog_articles', 'id', id))
@@ -121,7 +172,7 @@ router.get('/detail', async ctx => {
     let status = 1,
         msg = 'success';
     let id = ctx.request.query.id;
-    let sql = `SELECT id,username,title,introduction,content,created_at FROM blog_articles WHERE id=${id}`
+    let sql = `SELECT id,username,title,introduction,content,created_at FROM blog_articles WHERE id=${id}`;
     let data = await query(sql)
         .then(res => res)
         .catch(err => err);
@@ -150,7 +201,7 @@ router.get('/detail', async ctx => {
             msg
         }
     };
-})
+});
 
 /**
  * @description: 添加文章评论
@@ -164,7 +215,8 @@ router.get('/detail', async ctx => {
 router.post('/marks/add', async ctx => {
     let status = 0,
         msg = 'success',
-        res, obj;
+        res,
+        obj;
 
     let article_id = ctx.request.body.articleId,
         nickname = ctx.request.body.nickname,
@@ -206,5 +258,4 @@ router.post('/marks/add', async ctx => {
     };
 });
 
-
-module.exports = router
+module.exports = router;

@@ -1,23 +1,20 @@
 Arguments: 
-  /usr/local/bin/node /usr/local/bin/yarn add moment
+  /usr/local/bin/node /usr/local/Cellar/yarn/1.17.3/libexec/bin/yarn.js add koa-body
 
 PATH: 
   /usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 
 Yarn version: 
-  1.6.0
+  1.17.3
 
 Node version: 
-  11.0.0
+  12.9.1
 
 Platform: 
   darwin x64
 
 Trace: 
-  Error: https://registry.yarnpkg.com/moment/-/moment-2.24.0.tgz: ETIMEDOUT
-      at Timeout._onTimeout (/usr/local/lib/node_modules/yarn/lib/cli.js:133819:19)
-      at listOnTimeout (timers.js:324:15)
-      at processTimers (timers.js:268:5)
+  Error: https://registry.yarnpkg.com/koa/-/koa-2.7.0.tgz: ENOENT: no such file or directory, open '/Users/zhanglei/Library/Caches/Yarn/v4/npm-koa-2.7.0-7e00843506942b9d82c6cc33749f657c6e5e7adf/node_modules/koa/.yarn-tarball.tgz'
 
 npm manifest: 
   {
@@ -42,6 +39,7 @@ npm manifest:
       "koa-router": "^7.4.0",
       "koa-static": "^5.0.0",
       "koa-views": "^6.2.0",
+      "moment": "^2.24.0",
       "mysql": "^2.17.1"
     },
     "devDependencies": {
@@ -1266,6 +1264,10 @@ Lockfile:
     resolved "https://registry.yarnpkg.com/mkdirp/-/mkdirp-0.5.1.tgz#30057438eac6cf7f8c4767f38648d6697d75c903"
     dependencies:
       minimist "0.0.8"
+  
+  moment@^2.24.0:
+    version "2.24.0"
+    resolved "https://registry.npmjs.org/moment/-/moment-2.24.0.tgz#0d055d53f5052aa653c9f6eb68bb5d12bf5c2b5b"
   
   ms@2.0.0:
     version "2.0.0"
