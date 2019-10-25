@@ -2,11 +2,12 @@
  * @Author: zhanglei
  * @Date: 2019-09-09 15:21:14
  * @LastEditors: zhanglei
- * @LastEditTime: 2019-09-10 16:16:17
+ * @LastEditTime: 2019-10-25 15:50:28
  * @Description: 登录有关接口
  */
 const router = require('koa-router')()
 const moment = require('moment');
+const md5 = require('md5');
 
 const {
     query
@@ -39,8 +40,7 @@ router.post('/login', async ctx => {
             status = 0; // 失败
             msg = res.sqlMessage;
         } else {
-            // password
-            password = Buffer.from(password).toString('base64');
+            password = md5(password);
             res = res[0];
             if(res.username===username&&res.password === password) {
                 status = 1;
