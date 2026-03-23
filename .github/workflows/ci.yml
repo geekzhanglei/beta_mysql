@@ -1,0 +1,78 @@
+# 1. 这是一个 GitHub Actions 工作流文件，它告诉 GitHub 什么时候运行、运行什么以及怎么运行。
+name: Node.js CI
+
+# 2. 触发条件 (on): 告诉 GitHub 什么时候启动这个工作流
+on:
+  push:
+    # 当有代码推送到 master 或 main 分支时触发
+    branches: [ "master", "main" ]
+  pull_request:
+    # 当有 PR (合并请求) 提交到 master 或 main 分支时触发
+    branches: [ "master", "main" ]
+
+# 3. 任务 (jobs): 工作流中要执行的具体步骤，可以有多个任务
+jobs:
+  # 任务 A: 构建任务 (build)，主要用于检查代码是否能正常安装依赖
+  build:
+    # 指定运行环境：在 GitHub 提供的 Ubuntu 最新版虚拟机上运行
+    runs-on: ubuntu-latest
+
+    # 策略配置：可以在多个版本的 Node.js 下并行测试
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+
+    # 具体的执行步骤
+    steps:
+    # 第一步：检出代码。把你的仓库代码下载到 GitHub 的虚拟机里
+    - uses: actions/checkout@v4
+
+    # 第二步：安装 Node.js 环境
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        # 自动缓存 yarn 依赖，下次运行会更快
+        cache: 'yarn'
+
+    # 第三步：安装项目依赖
+    # --frozen-lockfile 确保安装的版本完全符合 yarn.lock，不自动更新
+    - run: yarn install --frozen-lockfile
+
+    # 注意：这里的虚拟机环境不包含你服务器上的 /opt/config/.env。
+    # 如果要在这里运行测试，需要通过 GitHub Secrets 手动注入环境变量。
+    # - name: Run Tests
+    #   run: yarn test
+    #   env:
+    #     DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+
+  # 任务 B: 自动化部署任务 (deploy) - 这就是所谓的 CD (持续部署)
+  deploy:
+    # 依赖关系：只有 build 任务成功通过，才会开始执行部署
+    needs: build
+    # 限制条件：只有在 master 或 main 分支上发生的 push 才会触发部署
+    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
+
+    runs-on: ubuntu-latest
+
+    steps:
+    # 使用 SSH 插件连接到你的云服务器并执行命令
+    - name: Deploy to Server
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        # 这一步是关键：它告诉 GitHub 登录你的服务器后，执行哪些命令
+        script: |
+          # 1. 进入你服务器上的项目目录
+          cd /www/backEnd/beta_mysql
+          # 2. 从 GitHub 拉取最新的代码
+          git pull origin master
+          # 3. 安装生产环境依赖 (不安装 devDependencies)
+          yarn install --production
+          # 4. 重启 Node.js 服务。
+          # 先停止正在运行的 bin/www 进程（如果有），然后后台启动。
+          # '|| true' 是为了防止第一次部署时没有进程可杀导致 CI 报错。
+          pkill -f "node bin/www" || true
+          # 使用 nohup 后台启动，并将日志输出到 app.log，防止 SSH 断开后进程关闭。
+          nohup npm start > app.log 2>&1 &
+
+
