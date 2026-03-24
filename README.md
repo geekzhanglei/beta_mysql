@@ -1,11 +1,3 @@
-<!--
- * @Author: zhanglei
- * @Date: 2019-09-04 15:10:02
- * @LastEditors: zhanglei
- * @LastEditTime: 2019-09-12 18:23:51
- * @Description: 接口文档
- -->
-
 # 重构后端接口服务
 
 基于 node(koa2)+mysql 重构 blog 后端接口
