@@ -72,11 +72,8 @@ jobs:
           git pull origin master
           # 3. 安装生产环境依赖 (不安装 devDependencies)
           yarn install --production
-          # 4. 重启 Node.js 服务。
-          # 先停止正在运行的 bin/www 进程（如果有），然后后台启动。
-          # '|| true' 是为了防止第一次部署时没有进程可杀导致 CI 报错。
-          pkill -f "node bin/www" || true
-          # 使用 nohup 后台启动，并将日志输出到 app.log，防止 SSH 断开后进程关闭。
-          nohup npm start > app.log 2>&1 &
+          # 4. 使用 PM2 重启 Node.js 服务
+          # PM2 是生产级进程管理器，可以确保服务稳定运行
+          pm2 restart bin/www || pm2 start bin/www
 
 
