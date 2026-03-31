@@ -70,10 +70,7 @@ jobs:
           cd /www/backEnd/beta_mysql
           # 2. 从 GitHub 拉取最新的代码
           git pull origin master
-          # 3. 安装生产环境依赖 (不安装 devDependencies)
-          yarn install --production
-          # 4. 使用 PM2 重启 Node.js 服务
-          # PM2 是生产级进程管理器，可以确保服务稳定运行
-          pm2 restart bin/www || pm2 start bin/www
+          # 3. 使用 npm scripts 进行部署
+          npm run deploy
 
 
