@@ -6,7 +6,7 @@
         "start": "node bin/www",
         "dev": "./node_modules/.bin/nodemon bin/www",
         "prd": "pm2 start bin/www",
-        "restart": "pm2 restart bin/www || pm2 start bin/www",
+        "restart": "pm2 restart bin/www 2>/dev/null || pm2 start bin/www",
         "stop": "pm2 stop bin/www || pm2 delete bin/www",
         "install-prod": "yarn install --production",
         "test": "echo \"Error: no test specified\" && exit 1"
