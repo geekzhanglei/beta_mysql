@@ -9,7 +9,6 @@
         "restart": "pm2 restart bin/www || pm2 start bin/www",
         "stop": "pm2 stop bin/www || pm2 delete bin/www",
         "install-prod": "yarn install --production",
-        "deploy": "pkill -f 'node bin/www' || true && yarn run install-prod && nohup yarn start > app.log 2>&1 &",
         "test": "echo \"Error: no test specified\" && exit 1"
     },
     "dependencies": {
