@@ -74,6 +74,7 @@ jobs:
           export NVM_DIR="/root/.nvm"
           [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
           # 4. 使用 npm scripts 进行部署
-          npm run deploy
+          yarn run install-prod
+          yarn run restart
 
 
