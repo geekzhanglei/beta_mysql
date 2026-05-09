@@ -392,3 +392,114 @@ GET: /blogapi/admin/msgwithmarks
 | -------- | ---- | -------- |
 | curpage  | str  | 当前页   |
 | pagesize | str  | 每页条数 |
+
+## GitHub CI/CD 部署集成
+
+本项目使用 GitHub Actions 实现自动化部署流程，支持代码提交、构建、测试和自动部署到生产环境。
+
+### 工作流配置
+
+项目在 `.github/workflows/` 目录下配置 CI/CD 工作流，主要工作流包括：
+
+#### 1. 自动部署工作流 (deploy.yml)
+
+**触发条件：**
+- 代码 push 到 main 或 master 分支
+- 手动触发 workflow_dispatch
+
+**流程步骤：**
+1. 检出代码
+2. 配置 Node.js 环境
+3. 安装依赖：`npm install` 或 `yarn install`
+4. 运行测试：`npm test`
+5. 构建应用（如需要）
+6. 部署到服务器
+
+#### 2. 环境配置
+
+在 GitHub 仓库 Settings > Secrets and variables > Actions 中配置以下环境变量：
+
+- `DEPLOY_HOST` - 部署服务器地址
+- `DEPLOY_USER` - 服务器用户名
+- `DEPLOY_KEY` - SSH 私钥
+- `DEPLOY_PATH` - 部署路径
+- `DB_HOST` - 数据库主机
+- `DB_USER` - 数据库用户
+- `DB_PASSWORD` - 数据库密码
+- `DB_NAME` - 数据库名称
+
+#### 3. 部署流程
+
+```yaml
+# 示例工作流
+name: Deploy to Production
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '16'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run tests
+        run: npm test
+
+      - name: Deploy to server
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_KEY }}
+          script: |
+            cd ${{ secrets.DEPLOY_PATH }}
+            git pull origin master
+            npm install
+            npm run build
+            pm2 restart beta_mysql || pm2 start app.js --name "beta_mysql"
+```
+
+### 本地测试
+
+在提交代码前，建议本地测试：
+
+```bash
+# 安装依赖
+npm install
+
+# 运行测试
+npm test
+
+# 启动应用
+npm start
+```
+
+### 监控和调试
+
+- 在 GitHub Actions 页面查看工作流执行状态
+- 查看每个步骤的详细日志
+- 部署失败时，检查 Secrets 配置和服务器连接
+- 查看服务器日志：`pm2 logs beta_mysql`
+
+### 常见问题
+
+**Q: 部署失败，提示权限拒绝？**
+A: 检查 SSH 私钥配置是否正确，确保服务器已添加对应的公钥。
+
+**Q: 依赖安装失败？**
+A: 确保 Node.js 版本兼容，检查 package.json 依赖配置。
+
+**Q: 数据库连接失败？**
+A: 确认 Secrets 中的数据库连接信息正确，服务器防火墙已开放相应端口。
