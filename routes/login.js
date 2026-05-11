@@ -49,7 +49,6 @@ router.post('/login', async ctx => {
                 ctx.cookies.set('blog_admin_token', token, {
                     httpOnly: true,
                     sameSite: 'lax',
-                    secure: ctx.secure || ctx.get('x-forwarded-proto') === 'https',
                     path: '/',
                     maxAge: 7 * 24 * 60 * 60 * 1000
                 });
@@ -169,7 +168,6 @@ router.post('/login', async ctx => {
         ctx.cookies.set('blog_admin_token', '', {
             httpOnly: true,
             sameSite: 'lax',
-            secure: ctx.secure || ctx.get('x-forwarded-proto') === 'https',
             path: '/',
             maxAge: 0
         });
