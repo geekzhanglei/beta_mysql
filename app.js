@@ -62,6 +62,19 @@ app.use(
     })
 );
 
+// CORS middleware
+app.use(async (ctx, next) => {
+    ctx.set('Access-Control-Allow-Origin', ctx.headers.origin || '*');
+    ctx.set('Access-Control-Allow-Headers', 'Content-Type, Content-Length, Authorization, Accept, X-Requested-With');
+    ctx.set('Access-Control-Allow-Methods', 'PUT, POST, GET, DELETE, OPTIONS');
+    ctx.set('Access-Control-Allow-Credentials', 'true');
+    if (ctx.method === 'OPTIONS') {
+        ctx.status = 204;
+    } else {
+        await next();
+    }
+});
+
 // logger 控制台打印当前调用的方法、url、耗时
 app.use(async (ctx, next) => {
     const start = new Date();
