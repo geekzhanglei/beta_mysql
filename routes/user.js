@@ -114,15 +114,22 @@ router.post('/modifyAdminInfo', async ctx => {
         url;
     let nickname = ctx.request.body.nickname,
         token = ctx.request.body.token,
-        headimg = ctx.request.files.headImg;
+        headimgUrl = ctx.request.body.headimg || ctx.request.body.head_img,
+        headimg = ctx.request.files && (ctx.request.files.headImg || ctx.request.files.headimg);
 
     if (!nickname || !token) {
         msg = '必填项不可为空';
     } else {
-        if (headimg.path) {
+        if (headimg && headimg.path) {
             url = headimg.path.split('public/').reverse()[0];
+        } else if (headimgUrl) {
+            url = headimgUrl;
         }
-        sql = `UPDATE blog_admin_user SET nickname=\'${nickname}\', head_img=\'${url}\' WHERE password=\'${token}\'`;
+        if (url) {
+            sql = `UPDATE blog_admin_user SET nickname=\'${nickname}\', head_img=\'${url}\' WHERE password=\'${token}\'`;
+        } else {
+            sql = `UPDATE blog_admin_user SET nickname=\'${nickname}\' WHERE password=\'${token}\'`;
+        }
         res = await query(sql)
             .then(res => res)
             .catch(err => err);
