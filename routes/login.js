@@ -46,6 +46,13 @@ router.post('/login', async ctx => {
                 status = 1;
                 msg = '登录成功';
                 token = res.password;
+                ctx.cookies.set('blog_admin_token', token, {
+                    httpOnly: true,
+                    sameSite: 'lax',
+                    secure: ctx.secure || ctx.get('x-forwarded-proto') === 'https',
+                    path: '/',
+                    maxAge: 7 * 24 * 60 * 60 * 1000
+                });
 
                 // 登录成功，写入登录日志表
                 var obj = {
@@ -159,6 +166,13 @@ router.post('/login', async ctx => {
     if (!token) {
         msg = '必填项不可为空';
     } else {
+        ctx.cookies.set('blog_admin_token', '', {
+            httpOnly: true,
+            sameSite: 'lax',
+            secure: ctx.secure || ctx.get('x-forwarded-proto') === 'https',
+            path: '/',
+            maxAge: 0
+        });
         let sql = `UPDATE blog_admin_login_log SET status=\'2\',exit_time=\'${moment().format('YYYY-MM-DD HH:MM:SS')}\' ORDER BY id DESC LIMIT 1`;
         res = await query(sql)
             .then(res => res)

@@ -10,9 +10,8 @@ const blogConfig = {
     articlePerPage: 3,
     msgIsPage: true,
     msgPerPage: 5,
-    msgName: '管理员',
-    msgReplyName: '回复者'
+    msgName: '匿名',
+    msgReplyName: '匿名'
 }
 
 module.exports = blogConfig;
-

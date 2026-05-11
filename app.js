@@ -56,6 +56,22 @@ app.use(json());
 app.use(logger());
 app.use(require('koa-static')(__dirname + '/public')); // 这里生成静态资源目录，浏览器访问时http://localhost:3000/upload/*.png 即可，不需要写public
 
+app.use(async (ctx, next) => {
+    const token = ctx.cookies.get('blog_admin_token');
+    if (token) {
+        if (ctx.request.query && !ctx.request.query.token) {
+            ctx.request.query.token = token;
+        }
+        if (ctx.query && !ctx.query.token) {
+            ctx.query.token = token;
+        }
+        if (ctx.request.body && typeof ctx.request.body === 'object' && !ctx.request.body.token) {
+            ctx.request.body.token = token;
+        }
+    }
+    await next();
+});
+
 app.use(
     views(__dirname + '/views', {
         extension: 'ejs'
