@@ -10,6 +10,7 @@ const blogConfig = {
     articlePerPage: 3,
     msgIsPage: true,
     msgPerPage: 5,
+    articleCommentName: '匿名',
     msgName: '匿名',
     msgReplyName: '匿名'
 }

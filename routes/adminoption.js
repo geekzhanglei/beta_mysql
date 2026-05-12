@@ -56,6 +56,7 @@ router.post('/setDefaultArticlePages', async (ctx, next) => {
  * @description: 设置留言板配置
  * @param {ispage} 是否分页
  * @param {perpage} 每页条数
+ * @param {defaultArticleCommentName} 文章评论默认昵称
  * @param {defaultCommentName} 默认评论名
  * @param {defaultReplyName} 默认回复名字
  * @param {token}  鉴权
@@ -71,6 +72,7 @@ router.post('/setDefaultCommentInfos', async (ctx, next) => {
     } else {
         blogConfig.msgIsPage = data.ispage == 'true';
         blogConfig.msgPerPage = data.perpage;
+        blogConfig.articleCommentName = data.defaultArticleCommentName || blogConfig.articleCommentName;
         blogConfig.msgName = data.defaultCommentName;
         blogConfig.msgReplyName = data.defaultReplyName;
         status = 1;
