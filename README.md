@@ -393,41 +393,6 @@ GET: /blogapi/admin/msgwithmarks
 | curpage  | str  | 当前页   |
 | pagesize | str  | 每页条数 |
 
-## 访问统计
-
-访问统计依赖 `sql/visit_stats.sql` 中的 `blog_page_views` 表。
-
-### 1. 上报页面访问
-
-```
-POST: /blogapi/visit/pageview
-```
-
-#### 请求参数
-
-| 字段名    | 类型 | 说明                   |
-| --------- | ---- | ---------------------- |
-| path      | str  | 公开页面 pathname      |
-| visitorId | str  | 浏览器匿名访客标识     |
-| sessionId | str  | 浏览器当前会话匿名标识 |
-
-当前只统计 `/`、`/about`、`/msg` 和 `/article/:id`。
-
-### 2. 查询后台访问统计
-
-```
-GET: /blogapi/admin/visit/stats?days=30
-```
-
-#### 请求参数
-
-| 字段名 | 类型 | 说明                          |
-| ------ | ---- | ----------------------------- |
-| days   | int  | 统计区间，仅支持 7、30、90 天 |
-| token  | str  | 后台 token                    |
-
-接口返回今日 PV/UV、区间 PV/UV、趋势数据和热门页面 Top 10。
-
 ## GitHub CI/CD 部署集成
 
 本项目使用 GitHub Actions 实现自动化部署流程，支持代码提交、构建、测试和自动部署到生产环境。

@@ -23,8 +23,6 @@ const login = require('./routes/login');
 const admincomments = require('./routes/admincomments');
 const adminmsg = require('./routes/adminmsg');
 const adminoption = require('./routes/adminoption');
-const visit = require('./routes/visit');
-const adminvisit = require('./routes/adminvisit');
 
 // error handler
 onerror(app);
@@ -110,8 +108,6 @@ app.use(login.routes(), login.allowedMethods());
 app.use(admincomments.routes(), admincomments.allowedMethods());
 app.use(adminmsg.routes(), adminmsg.allowedMethods());
 app.use(adminoption.routes(), adminoption.allowedMethods());
-app.use(visit.routes(), visit.allowedMethods());
-app.use(adminvisit.routes(), adminvisit.allowedMethods());
 
 // error-handling
 app.on('error', (err, ctx) => {
