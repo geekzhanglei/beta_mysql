@@ -103,4 +103,39 @@ router.get('/msgwithmarks', async (ctx, next) => {
     };
 });
 
+/**
+ * @description: 审核通过动态评论
+ * @param {id} 评论id
+ * @param {token} 鉴权
+ * @type {post}
+ * @return {Object} result
+ */
+router.post('/approveMsg', async ctx => {
+    let status = 0,
+        msg = 'success',
+        res;
+    let id = ctx.request.body.id,
+        token = ctx.request.body.token;
+    if (!id || !token) {
+        msg = '参数校验失败';
+    } else {
+        res = await query('UPDATE blog_message_board_mark SET status=1 WHERE id=?', [id])
+            .then(res => res)
+            .catch(err => err);
+        if (res.errno) {
+            msg = res.sqlMessage;
+        } else {
+            status = 1;
+            msg = '审核通过';
+        }
+    }
+
+    ctx.body = {
+        result: {
+            msg,
+            status
+        }
+    };
+});
+
 module.exports = router;

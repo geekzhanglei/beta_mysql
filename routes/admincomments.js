@@ -82,6 +82,7 @@ router.get('/articlesWithMarks', async (ctx, next) => {
             email: e.email,
             website: e.website,
             content: e.content,
+            status: e.status,
             create_time: Date.parse(e.create_time) / 1000
         };
         if (data2res[e.articleId]) {
@@ -105,6 +106,41 @@ router.get('/articlesWithMarks', async (ctx, next) => {
             perpage: pagesize, // 根据前端参数
             total: Math.ceil(data3[0]['COUNT(*)'] / blogConfig.articleIsPage),
             msg
+        }
+    };
+});
+
+/**
+ * @description: 审核通过文章评论
+ * @param {id} 评论id
+ * @param {token} 鉴权
+ * @type {get}
+ * @return {Object} result
+ */
+router.get('/approveMark', async ctx => {
+    let status = 0,
+        msg = 'success',
+        res;
+    let id = ctx.request.query.id,
+        token = ctx.request.query.token;
+    if (!id || !token) {
+        msg = '参数校验失败';
+    } else {
+        res = await query('UPDATE blog_article_marks SET status=1 WHERE id=?', [id])
+            .then(res => res)
+            .catch(err => err);
+        if (res.errno) {
+            msg = res.sqlMessage;
+        } else {
+            status = 1;
+            msg = '审核通过';
+        }
+    }
+
+    ctx.body = {
+        result: {
+            msg,
+            status
         }
     };
 });

@@ -176,7 +176,7 @@ router.get('/detail', async ctx => {
     let data = await query(sql)
         .then(res => res)
         .catch(err => err);
-    let commentSql = `SELECT * FROM blog_article_marks WHERE article_id=${id}`;
+    let commentSql = `SELECT * FROM blog_article_marks WHERE article_id=${id} AND status=1`;
     let data2 = await query(commentSql)
         .then(res => res)
         .catch(err => err);
@@ -232,11 +232,12 @@ router.post('/marks/add', async ctx => {
             content,
             nickname,
             email,
-            website
+            website,
+            status: 0
         };
         sql = `INSERT INTO blog_article_marks (${Object.keys(
             obj
-        )}) VALUES(?,?,?,?,?)`;
+        )}) VALUES(?,?,?,?,?,?)`;
         params = Object.values(obj);
         res = await query(sql, params)
             .then(res => res)
@@ -247,6 +248,7 @@ router.post('/marks/add', async ctx => {
             msg = res.sqlMessage;
         } else {
             status = 1;
+            msg = '评论已提交，审核通过后展示';
         }
     }
 

@@ -38,10 +38,10 @@ router.get('/', async (ctx, next) => {
     let sql;
     if (blogConfig.msgIsPage) {
         // 分页
-        sql = `SELECT * FROM blog_message_board_mark  ORDER BY id DESC LIMIT ${startpage},${pagesize}`;
+        sql = `SELECT * FROM blog_message_board_mark WHERE status=1 ORDER BY id DESC LIMIT ${startpage},${pagesize}`;
     } else {
         // 不分页
-        sql = `SELECT * FROM blog_message_board_mark  ORDER BY id DESC`;
+        sql = `SELECT * FROM blog_message_board_mark WHERE status=1 ORDER BY id DESC`;
     }
     let data = await query(sql)
         .then(res => res)
@@ -59,7 +59,7 @@ router.get('/', async (ctx, next) => {
         .then(res => res)
         .catch(err => err);
 
-    let countsql = `SELECT COUNT(*) FROM blog_message_board_mark`;
+    let countsql = `SELECT COUNT(*) FROM blog_message_board_mark WHERE status=1`;
     let data3 = await query(countsql)
         .then(res => res)
         .catch(err => err);
@@ -129,11 +129,12 @@ router.post('/add', async (ctx, next) => {
     } else {
         obj = {
             username: data.username || blogConfig.msgName,
-            content: data.content
+            content: data.content,
+            status: 0
         };
         sql = `INSERT INTO blog_message_board_mark (${Object.keys(
             obj
-        )}) VALUES(?,?)`;
+        )}) VALUES(?,?,?)`;
         params = Object.values(obj);
         res = await query(sql, params)
             .then(res => res)
@@ -144,6 +145,7 @@ router.post('/add', async (ctx, next) => {
             msg = res.sqlMessage;
         } else {
             status = 1;
+            msg = '评论已提交，审核通过后展示';
         }
     }
 
