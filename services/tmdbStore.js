@@ -46,6 +46,11 @@ async function ensureEpisodeTables() {
         return;
     }
 
+    if (process.env.TMDB_ENSURE_EPISODE_TABLES !== '1') {
+        episodeSchemaReady = true;
+        return;
+    }
+
     await tmdbQuery(
         'CREATE TABLE IF NOT EXISTS tmdb_tv_season (' +
             'id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT, ' +

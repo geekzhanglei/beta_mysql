@@ -29,6 +29,8 @@ GET /blogapi/ent/movie/:id
 
 `/tv/episode-calendar` 会优先使用独立库中的 episode 缓存。缓存缺失时默认只解析前 8 部热门剧的分集信息，可通过 `TMDB_EPISODE_RESOLVE_LIMIT` 调整服务端默认值，接口参数 `episodeLimit` 最大只允许到 12，避免单页日历对 TMDB 源站产生过多请求。
 
+生产环境建议先执行 `sql/tmdb_movie_calendar.sql` 完成表结构迁移。运行时默认不会自动建表；仅在开发环境需要自动建表时，才配置 `TMDB_ENSURE_EPISODE_TABLES=1`。
+
 # 接口文档
 
 ## 留言板
