@@ -121,7 +121,11 @@ async function upsertDetailEpisodes(tvId, payload) {
     const episodes = [payload && payload.last_episode_to_air, payload && payload.next_episode_to_air].filter(Boolean);
 
     for (let i = 0; i < episodes.length; i++) {
-        await upsertEpisodePayload(tvId, episodes[i], TTL.SEASON);
+        try {
+            await upsertEpisodePayload(tvId, episodes[i], TTL.SEASON);
+        } catch (err) {
+            console.error('[ent] episode cache write skipped', tvId, err.message);
+        }
     }
 }
 
@@ -138,7 +142,13 @@ async function getTvDetailPayload(id) {
 }
 
 async function getTvSeasonPayload(id, seasonNumber) {
-    const seasonCache = await getSeasonCache(id, seasonNumber);
+    let seasonCache = null;
+
+    try {
+        seasonCache = await getSeasonCache(id, seasonNumber);
+    } catch (err) {
+        console.error('[ent] season cache read skipped', id, seasonNumber, err.message);
+    }
 
     if (seasonCache) {
         return {
@@ -154,7 +164,11 @@ async function getTvSeasonPayload(id, seasonNumber) {
         TTL.SEASON
     );
 
-    await upsertSeasonPayload(id, cachedResult.payload, TTL.SEASON);
+    try {
+        await upsertSeasonPayload(id, cachedResult.payload, TTL.SEASON);
+    } catch (err) {
+        console.error('[ent] season cache write skipped', id, seasonNumber, err.message);
+    }
 
     return cachedResult;
 }
@@ -187,7 +201,13 @@ function chooseSeasonNumberForDate(detailPayload, date) {
 }
 
 async function findEpisodesForDate(tvId, date, detailPayload) {
-    const episodeCache = await getEpisodeCacheByAirDate(tvId, date);
+    let episodeCache = [];
+
+    try {
+        episodeCache = await getEpisodeCacheByAirDate(tvId, date);
+    } catch (err) {
+        console.error('[ent] episode cache read skipped', tvId, date, err.message);
+    }
 
     if (episodeCache.length) {
         return episodeCache.map(item => normalizeEpisode(item, tvId)).filter(Boolean);
@@ -198,7 +218,11 @@ async function findEpisodesForDate(tvId, date, detailPayload) {
 
     if (detailEpisodes.length) {
         for (let i = 0; i < detailEpisodes.length; i++) {
-            await upsertEpisodePayload(tvId, detailEpisodes[i], TTL.SEASON);
+            try {
+                await upsertEpisodePayload(tvId, detailEpisodes[i], TTL.SEASON);
+            } catch (err) {
+                console.error('[ent] episode cache write skipped', tvId, err.message);
+            }
         }
         return detailEpisodes.map(item => normalizeEpisode(item, tvId)).filter(Boolean);
     }
