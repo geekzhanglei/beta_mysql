@@ -74,8 +74,8 @@ function normalizeMedia(item, mediaType) {
         originalTitle: mediaType === 'movie' ? item.original_title : item.original_name,
         overview: item.overview || '',
         posterPath: item.poster_path || '',
-        posterUrl: getImageUrl(item.poster_path, 'w342'),
-        backdropUrl: getImageUrl(item.backdrop_path, 'w780'),
+        posterUrl: getImageUrl(item.poster_path, 'w185'),
+        backdropUrl: getImageUrl(item.backdrop_path, 'w500'),
         releaseDate: item.release_date || '',
         firstAirDate: item.first_air_date || '',
         voteAverage: item.vote_average || 0,
@@ -100,6 +100,8 @@ function normalizeList(payload, mediaType) {
 function normalizeDetail(payload, mediaType) {
     const detail = normalizeMedia(payload, mediaType);
 
+    detail.posterUrl = getImageUrl(payload.poster_path, 'w342');
+    detail.backdropUrl = getImageUrl(payload.backdrop_path, 'w780');
     detail.homepage = payload.homepage || '';
     detail.status = payload.status || '';
     detail.tagline = payload.tagline || '';

@@ -32,6 +32,8 @@ GET /blogapi/ent/image/w342/example.jpg
 
 接口返回的图片地址默认使用 `https://blog.feroad.com/blogapi/ent/image/...` 代理 TMDB 图片，避免小程序体验版直接依赖 `image.tmdb.org`。如需换公开域名，可配置 `TMDB_PUBLIC_API_BASE_URL` 或 `TMDB_IMAGE_PROXY_BASE_URL`。
 
+图片代理会落盘缓存到 `public/tmdb-image-cache/`，默认容量上限 2GB，超过后按最久未访问/修改的文件优先清理。可通过 `TMDB_IMAGE_CACHE_DIR` 和 `TMDB_IMAGE_CACHE_MAX_BYTES` 调整。列表页默认返回 `w185` 小海报，详情页使用更清晰的 `w342` 海报和 `w780` 背景。
+
 生产环境建议先执行 `sql/tmdb_movie_calendar.sql` 完成表结构迁移。运行时默认不会自动建表；仅在开发环境需要自动建表时，才配置 `TMDB_ENSURE_EPISODE_TABLES=1`。
 
 # 接口文档

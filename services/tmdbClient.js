@@ -1,4 +1,6 @@
 const https = require('https');
+const fs = require('fs');
+const path = require('path');
 
 const BASE_URL = process.env.TMDB_API_BASE_URL || 'https://api.themoviedb.org/3';
 const DEFAULT_LANGUAGE = process.env.TMDB_DEFAULT_LANGUAGE || 'zh-CN';
@@ -8,6 +10,8 @@ const IMAGE_BASE_URL = process.env.TMDB_IMAGE_BASE_URL || 'https://image.tmdb.or
 const PUBLIC_API_BASE_URL = process.env.TMDB_PUBLIC_API_BASE_URL || 'https://blog.feroad.com';
 const IMAGE_PROXY_BASE_URL = process.env.TMDB_IMAGE_PROXY_BASE_URL || PUBLIC_API_BASE_URL + '/blogapi/ent/image';
 const REQUEST_TIMEOUT = Number(process.env.TMDB_REQUEST_TIMEOUT || 8000);
+const IMAGE_CACHE_MAX_BYTES = Number(process.env.TMDB_IMAGE_CACHE_MAX_BYTES || 2 * 1024 * 1024 * 1024);
+const IMAGE_CACHE_DIR = process.env.TMDB_IMAGE_CACHE_DIR || path.join(__dirname, '..', 'public', 'tmdb-image-cache');
 const BASE_URL_HOSTNAME = new URL(BASE_URL).hostname;
 
 function getCredential() {
@@ -120,7 +124,108 @@ function getImageUrl(path, size) {
     return IMAGE_PROXY_BASE_URL + '/' + (size || 'w342') + path;
 }
 
-function requestTmdbImage(size, file) {
+function getContentType(file) {
+    const ext = path.extname(file).toLowerCase();
+
+    if (ext === '.png') {
+        return 'image/png';
+    }
+    if (ext === '.webp') {
+        return 'image/webp';
+    }
+    return 'image/jpeg';
+}
+
+function getImageCachePath(size, file) {
+    return path.join(IMAGE_CACHE_DIR, size, file);
+}
+
+async function readCachedImage(size, file) {
+    const cachePath = getImageCachePath(size, file);
+    const body = await fs.promises.readFile(cachePath);
+    const now = new Date();
+
+    fs.promises.utimes(cachePath, now, now).catch(() => {});
+
+    return {
+        contentType: getContentType(file),
+        cacheControl: 'public, max-age=31536000',
+        body
+    };
+}
+
+async function listCachedFiles(dir) {
+    let files = [];
+    let entries = [];
+
+    try {
+        entries = await fs.promises.readdir(dir, { withFileTypes: true });
+    } catch (err) {
+        if (err.code === 'ENOENT') {
+            return files;
+        }
+        throw err;
+    }
+
+    for (let i = 0; i < entries.length; i++) {
+        const entry = entries[i];
+        const fullPath = path.join(dir, entry.name);
+
+        if (entry.isDirectory()) {
+            files = files.concat(await listCachedFiles(fullPath));
+            continue;
+        }
+
+        if (entry.isFile()) {
+            const stat = await fs.promises.stat(fullPath);
+            files.push({
+                path: fullPath,
+                size: stat.size,
+                time: Math.min(stat.atimeMs, stat.mtimeMs)
+            });
+        }
+    }
+
+    return files;
+}
+
+async function enforceImageCacheLimit() {
+    if (!IMAGE_CACHE_MAX_BYTES || IMAGE_CACHE_MAX_BYTES < 1) {
+        return;
+    }
+
+    const files = await listCachedFiles(IMAGE_CACHE_DIR);
+    let total = files.reduce((sum, item) => sum + item.size, 0);
+
+    if (total <= IMAGE_CACHE_MAX_BYTES) {
+        return;
+    }
+
+    files.sort((a, b) => a.time - b.time);
+
+    for (let i = 0; i < files.length && total > IMAGE_CACHE_MAX_BYTES; i++) {
+        try {
+            await fs.promises.unlink(files[i].path);
+            total -= files[i].size;
+        } catch (err) {
+            console.error('[tmdb-image-cache] remove failed', files[i].path, err.message);
+        }
+    }
+}
+
+async function writeCachedImage(size, file, image) {
+    const cachePath = getImageCachePath(size, file);
+    const tmpPath = cachePath + '.tmp-' + Date.now();
+
+    await fs.promises.mkdir(path.dirname(cachePath), { recursive: true });
+    await fs.promises.writeFile(tmpPath, image.body);
+    await fs.promises.rename(tmpPath, cachePath);
+    enforceImageCacheLimit().catch(err => {
+        console.error('[tmdb-image-cache] cleanup failed', err.message);
+    });
+}
+
+function fetchTmdbImage(size, file) {
     const url = new URL(IMAGE_BASE_URL + '/' + size + '/' + file);
 
     return new Promise((resolve, reject) => {
@@ -159,6 +264,20 @@ function requestTmdbImage(size, file) {
 
         req.end();
     });
+}
+
+async function requestTmdbImage(size, file) {
+    try {
+        return await readCachedImage(size, file);
+    } catch (err) {
+        if (err.code !== 'ENOENT') {
+            console.error('[tmdb-image-cache] read failed', err.message);
+        }
+    }
+
+    const image = await fetchTmdbImage(size, file);
+    await writeCachedImage(size, file, image);
+    return image;
 }
 
 module.exports = {
