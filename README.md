@@ -2,6 +2,28 @@
 
 基于 node(koa2)+mysql 重构 blog 后端接口
 
+## 影视日历接口
+
+影视日历使用独立 MySQL 库，不和博客业务库共表：
+
+- 建库脚本：`sql/tmdb_movie_calendar.sql`
+- 默认库名：`tmdb_movie_calendar`
+- 可选环境变量：`TMDB_DB_HOST`、`TMDB_DB_PORT`、`TMDB_DB_USER`、`TMDB_DB_PASSWORD`、`TMDB_DB_DATABASE`
+- TMDB 凭证：优先配置 `TMDB_ACCESS_TOKEN`，也支持 `TMDB_API_KEY`
+
+主要接口：
+
+```text
+GET /blogapi/ent/tv/airing-today
+GET /blogapi/ent/tv/calendar?date=2026-05-29
+GET /blogapi/ent/tv/on-air
+GET /blogapi/ent/tv/:id
+GET /blogapi/ent/movies/now-playing?region=CN
+GET /blogapi/ent/movies/upcoming?region=US
+GET /blogapi/ent/movies/trending?window=day
+GET /blogapi/ent/movie/:id
+```
+
 # 接口文档
 
 ## 留言板

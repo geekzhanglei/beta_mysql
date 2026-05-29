@@ -25,6 +25,7 @@ const adminmsg = require('./routes/adminmsg');
 const adminoption = require('./routes/adminoption');
 const visit = require('./routes/visit');
 const adminvisit = require('./routes/adminvisit');
+const ent = require('./routes/ent');
 
 // error handler
 onerror(app);
@@ -112,6 +113,7 @@ app.use(adminmsg.routes(), adminmsg.allowedMethods());
 app.use(adminoption.routes(), adminoption.allowedMethods());
 app.use(visit.routes(), visit.allowedMethods());
 app.use(adminvisit.routes(), adminvisit.allowedMethods());
+app.use(ent.routes(), ent.allowedMethods());
 
 // error-handling
 app.on('error', (err, ctx) => {
