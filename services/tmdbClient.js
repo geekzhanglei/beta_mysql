@@ -6,6 +6,7 @@ const DEFAULT_REGION = process.env.TMDB_DEFAULT_REGION || 'CN';
 const DEFAULT_TIMEZONE = process.env.TMDB_DEFAULT_TIMEZONE || 'Asia/Shanghai';
 const IMAGE_BASE_URL = process.env.TMDB_IMAGE_BASE_URL || 'https://image.tmdb.org/t/p';
 const REQUEST_TIMEOUT = Number(process.env.TMDB_REQUEST_TIMEOUT || 8000);
+const BASE_URL_HOSTNAME = new URL(BASE_URL).hostname;
 
 function getCredential() {
     return {
@@ -46,6 +47,7 @@ function requestTmdb(apiPath, params) {
     }
 
     const url = buildUrl(apiPath, requestParams);
+    const resolveIp = process.env.TMDB_API_RESOLVE_IP || '';
     const options = {
         method: 'GET',
         headers: {
@@ -53,6 +55,12 @@ function requestTmdb(apiPath, params) {
         },
         timeout: REQUEST_TIMEOUT
     };
+
+    if (resolveIp && url.hostname === BASE_URL_HOSTNAME) {
+        options.lookup = (hostname, lookupOptions, callback) => {
+            callback(null, resolveIp, 4);
+        };
+    }
 
     if (credential.token) {
         options.headers.Authorization = 'Bearer ' + credential.token;

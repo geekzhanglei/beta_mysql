@@ -10,6 +10,7 @@
 - 默认库名：`tmdb_movie_calendar`
 - 可选环境变量：`TMDB_DB_HOST`、`TMDB_DB_PORT`、`TMDB_DB_USER`、`TMDB_DB_PASSWORD`、`TMDB_DB_DATABASE`
 - TMDB 凭证：优先配置 `TMDB_ACCESS_TOKEN`，也支持 `TMDB_API_KEY`
+- 如果服务器 DNS 解析 `api.themoviedb.org` 异常，可配置 `TMDB_API_RESOLVE_IP`，只影响本服务的 TMDB API 请求
 
 主要接口：
 
