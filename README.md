@@ -17,13 +17,17 @@
 ```text
 GET /blogapi/ent/tv/airing-today
 GET /blogapi/ent/tv/calendar?date=2026-05-29
+GET /blogapi/ent/tv/episode-calendar?date=2026-05-29
 GET /blogapi/ent/tv/on-air
 GET /blogapi/ent/tv/:id
+GET /blogapi/ent/tv/:id/season/:seasonNumber
 GET /blogapi/ent/movies/now-playing?region=CN
 GET /blogapi/ent/movies/upcoming?region=US
 GET /blogapi/ent/movies/trending?window=day
 GET /blogapi/ent/movie/:id
 ```
+
+`/tv/episode-calendar` 会优先使用独立库中的 episode 缓存。缓存缺失时默认只解析前 8 部热门剧的分集信息，可通过 `TMDB_EPISODE_RESOLVE_LIMIT` 调整服务端默认值，接口参数 `episodeLimit` 最大只允许到 12，避免单页日历对 TMDB 源站产生过多请求。
 
 # 接口文档
 

@@ -59,3 +59,45 @@ CREATE TABLE IF NOT EXISTS `tmdb_calendar_item` (
   KEY `idx_event_date` (`event_date`),
   KEY `idx_media_event` (`media_type`, `event_type`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `tmdb_tv_season` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `tv_id` INT UNSIGNED NOT NULL,
+  `season_number` INT NOT NULL,
+  `name` VARCHAR(255) NOT NULL DEFAULT '',
+  `overview` TEXT,
+  `poster_path` VARCHAR(255) NOT NULL DEFAULT '',
+  `air_date` DATE NULL,
+  `episode_count` INT UNSIGNED NOT NULL DEFAULT 0,
+  `payload_json` LONGTEXT,
+  `expires_at` DATETIME NOT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_tv_season` (`tv_id`, `season_number`),
+  KEY `idx_tv_season_expires` (`expires_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `tmdb_tv_episode` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `episode_tmdb_id` INT UNSIGNED NOT NULL DEFAULT 0,
+  `tv_id` INT UNSIGNED NOT NULL,
+  `season_number` INT NOT NULL,
+  `episode_number` INT NOT NULL,
+  `air_date` DATE NULL,
+  `name` VARCHAR(255) NOT NULL DEFAULT '',
+  `overview` TEXT,
+  `still_path` VARCHAR(255) NOT NULL DEFAULT '',
+  `vote_average` DECIMAL(4, 2) NOT NULL DEFAULT 0,
+  `runtime` INT UNSIGNED NOT NULL DEFAULT 0,
+  `episode_type` VARCHAR(32) NOT NULL DEFAULT '',
+  `payload_json` LONGTEXT,
+  `expires_at` DATETIME NOT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_tv_episode` (`tv_id`, `season_number`, `episode_number`),
+  KEY `idx_tv_air_date` (`tv_id`, `air_date`),
+  KEY `idx_air_date` (`air_date`),
+  KEY `idx_tv_episode_expires` (`expires_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

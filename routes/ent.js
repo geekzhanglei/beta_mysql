@@ -1,13 +1,24 @@
 const router = require('koa-router')();
 const { requestTmdb, DEFAULT_REGION, DEFAULT_TIMEZONE } = require('../services/tmdbClient');
-const { getApiCache, setApiCache, upsertMediaList, upsertCalendarList } = require('../services/tmdbStore');
-const { normalizeList, normalizeDetail } = require('../services/tmdbFormatter');
+const {
+    getApiCache,
+    setApiCache,
+    upsertMediaList,
+    upsertCalendarList,
+    getSeasonCache,
+    upsertSeasonPayload,
+    upsertEpisodePayload,
+    getEpisodeCacheByAirDate
+} = require('../services/tmdbStore');
+const { normalizeList, normalizeDetail, normalizeEpisode, normalizeSeason } = require('../services/tmdbFormatter');
 
 const TTL = {
     TODAY: 6 * 60 * 60,
     LIST: 12 * 60 * 60,
     DETAIL: 24 * 60 * 60,
-    TRENDING: 6 * 60 * 60
+    TRENDING: 6 * 60 * 60,
+    SEASON: 12 * 60 * 60,
+    EPISODE_CALENDAR: 3 * 60 * 60
 };
 
 router.prefix('/blogapi/ent');
@@ -92,6 +103,150 @@ async function listHandler(ctx, options) {
     } catch (err) {
         fail(ctx, err);
     }
+}
+
+function sameDate(value, date) {
+    return value && String(value).slice(0, 10) === date;
+}
+
+function getEpisodeResolveLimit(ctx) {
+    const configured = Number(process.env.TMDB_EPISODE_RESOLVE_LIMIT || 8);
+    const requested = Number(ctx.request.query.episodeLimit || configured);
+    const limit = requested > 0 ? requested : configured;
+
+    return Math.min(limit, 12);
+}
+
+async function upsertDetailEpisodes(tvId, payload) {
+    const episodes = [payload && payload.last_episode_to_air, payload && payload.next_episode_to_air].filter(Boolean);
+
+    for (let i = 0; i < episodes.length; i++) {
+        await upsertEpisodePayload(tvId, episodes[i], TTL.SEASON);
+    }
+}
+
+async function getTvDetailPayload(id) {
+    const params = {
+        append_to_response: 'content_ratings,external_ids'
+    };
+    const cachedResult = await getCachedTmdbPayload(makeCacheKey('tv_detail', { id }), '/tv/' + id, params, TTL.DETAIL);
+
+    await upsertMediaList([cachedResult.payload], 'tv');
+    await upsertDetailEpisodes(id, cachedResult.payload);
+
+    return cachedResult;
+}
+
+async function getTvSeasonPayload(id, seasonNumber) {
+    const seasonCache = await getSeasonCache(id, seasonNumber);
+
+    if (seasonCache) {
+        return {
+            source: 'cache',
+            payload: seasonCache
+        };
+    }
+
+    const cachedResult = await getCachedTmdbPayload(
+        makeCacheKey('tv_season', { id, seasonNumber }),
+        '/tv/' + id + '/season/' + seasonNumber,
+        {},
+        TTL.SEASON
+    );
+
+    await upsertSeasonPayload(id, cachedResult.payload, TTL.SEASON);
+
+    return cachedResult;
+}
+
+function chooseSeasonNumberForDate(detailPayload, date) {
+    const nextEpisode = detailPayload.next_episode_to_air;
+    const lastEpisode = detailPayload.last_episode_to_air;
+
+    if (sameDate(nextEpisode && nextEpisode.air_date, date)) {
+        return Number(nextEpisode.season_number || 0);
+    }
+    if (sameDate(lastEpisode && lastEpisode.air_date, date)) {
+        return Number(lastEpisode.season_number || 0);
+    }
+
+    const seasons = Array.isArray(detailPayload.seasons) ? detailPayload.seasons : [];
+    const regularSeasons = seasons
+        .filter(item => Number(item.season_number) > 0)
+        .sort((a, b) => Number(b.season_number || 0) - Number(a.season_number || 0));
+    const airedSeasons = regularSeasons.filter(item => item.air_date && item.air_date <= date);
+
+    if (airedSeasons.length) {
+        return Number(airedSeasons[0].season_number || 0);
+    }
+    if (regularSeasons.length) {
+        return Number(regularSeasons[0].season_number || 0);
+    }
+
+    return 0;
+}
+
+async function findEpisodesForDate(tvId, date, detailPayload) {
+    const episodeCache = await getEpisodeCacheByAirDate(tvId, date);
+
+    if (episodeCache.length) {
+        return episodeCache.map(item => normalizeEpisode(item, tvId)).filter(Boolean);
+    }
+
+    const detailEpisodes = [detailPayload.next_episode_to_air, detailPayload.last_episode_to_air]
+        .filter(item => sameDate(item && item.air_date, date));
+
+    if (detailEpisodes.length) {
+        for (let i = 0; i < detailEpisodes.length; i++) {
+            await upsertEpisodePayload(tvId, detailEpisodes[i], TTL.SEASON);
+        }
+        return detailEpisodes.map(item => normalizeEpisode(item, tvId)).filter(Boolean);
+    }
+
+    const seasonNumber = chooseSeasonNumberForDate(detailPayload, date);
+
+    if (!seasonNumber) {
+        return [];
+    }
+
+    const seasonResult = await getTvSeasonPayload(tvId, seasonNumber);
+    const episodes = Array.isArray(seasonResult.payload.episodes) ? seasonResult.payload.episodes : [];
+
+    return episodes
+        .filter(item => sameDate(item.air_date, date))
+        .map(item => normalizeEpisode(Object.assign({}, item, { season_number: item.season_number || seasonNumber }), tvId))
+        .filter(Boolean);
+}
+
+async function enrichEpisodeCalendarList(list, date, episodeResolveLimit) {
+    const resolved = [];
+
+    for (let i = 0; i < list.length; i++) {
+        const item = Object.assign({}, list[i]);
+
+        item.episodes = [];
+        item.episode = null;
+        item.hasEpisode = false;
+        item.episodeText = '';
+
+        if (i < episodeResolveLimit) {
+            try {
+                const detailResult = await getTvDetailPayload(item.id);
+                const episodes = await findEpisodesForDate(item.id, date, detailResult.payload);
+
+                item.episodes = episodes;
+                item.episode = episodes[0] || null;
+                item.hasEpisode = !!episodes.length;
+                item.episodeText = item.episode ? item.episode.label : '';
+            } catch (err) {
+                console.error('[ent] episode resolve skipped', item.id, err.message);
+            }
+        }
+
+        resolved.push(item);
+    }
+
+    return resolved;
 }
 
 router.get('/health', async ctx => {
@@ -248,6 +403,83 @@ router.get('/tv/calendar', async ctx => {
     });
 });
 
+router.get('/tv/episode-calendar', async ctx => {
+    const date = getDateParam(ctx);
+    const episodeResolveLimit = getEpisodeResolveLimit(ctx);
+    const params = {
+        page: getPage(ctx),
+        timezone: getTimezone(ctx),
+        'air_date.gte': date,
+        'air_date.lte': date,
+        sort_by: 'popularity.desc'
+    };
+    const responseCacheKey = makeCacheKey('tv_episode_calendar', Object.assign({}, params, {
+        episodeResolveLimit
+    }));
+
+    try {
+        const cachedResponse = await getApiCache(responseCacheKey);
+
+        if (cachedResponse) {
+            ok(ctx, cachedResponse, 'cache');
+            return;
+        }
+
+        const cachedResult = await getCachedTmdbPayload(
+            makeCacheKey('tv_calendar', params),
+            '/discover/tv',
+            params,
+            TTL.TODAY
+        );
+        const payload = cachedResult.payload;
+        const items = Array.isArray(payload.results) ? payload.results : [];
+
+        if (cachedResult.source === 'tmdb') {
+            await upsertMediaList(items, 'tv');
+            await upsertCalendarList(items, {
+                mediaType: 'tv',
+                eventType: 'calendar',
+                eventDate: date,
+                timezone: params.timezone
+            });
+        }
+
+        const normalized = normalizeList(payload, 'tv');
+        const list = await enrichEpisodeCalendarList(normalized.list, date, episodeResolveLimit);
+        const data = {
+            page: normalized.page,
+            totalPages: normalized.totalPages,
+            totalResults: normalized.totalResults,
+            episodeResolveLimit,
+            episodeResolvedCount: list.filter(item => item.hasEpisode).length,
+            list
+        };
+
+        await setApiCache(responseCacheKey, data, TTL.EPISODE_CALENDAR);
+        ok(ctx, data, cachedResult.source);
+    } catch (err) {
+        fail(ctx, err);
+    }
+});
+
+router.get('/tv/:id/season/:seasonNumber', async ctx => {
+    const id = Number(ctx.params.id);
+    const seasonNumber = Number(ctx.params.seasonNumber);
+
+    if (!id || !seasonNumber) {
+        ctx.status = 400;
+        ctx.body = { code: 1, msg: '剧集季数参数不合法' };
+        return;
+    }
+
+    try {
+        const cachedResult = await getTvSeasonPayload(id, seasonNumber);
+        ok(ctx, { season: normalizeSeason(cachedResult.payload, id) }, cachedResult.source);
+    } catch (err) {
+        fail(ctx, err);
+    }
+});
+
 router.get('/tv/:id', async ctx => {
     const id = Number(ctx.params.id);
 
@@ -257,16 +489,8 @@ router.get('/tv/:id', async ctx => {
         return;
     }
 
-    const params = {
-        append_to_response: 'content_ratings,external_ids'
-    };
-    const cacheKey = makeCacheKey('tv_detail', { id });
-
     try {
-        const cachedResult = await getCachedTmdbPayload(cacheKey, '/tv/' + id, params, TTL.DETAIL);
-        if (cachedResult.source === 'tmdb') {
-            await upsertMediaList([cachedResult.payload], 'tv');
-        }
+        const cachedResult = await getTvDetailPayload(id);
         ok(ctx, { detail: normalizeDetail(cachedResult.payload, 'tv') }, cachedResult.source);
     } catch (err) {
         fail(ctx, err);
