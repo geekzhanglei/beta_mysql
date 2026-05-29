@@ -5,6 +5,8 @@ const DEFAULT_LANGUAGE = process.env.TMDB_DEFAULT_LANGUAGE || 'zh-CN';
 const DEFAULT_REGION = process.env.TMDB_DEFAULT_REGION || 'CN';
 const DEFAULT_TIMEZONE = process.env.TMDB_DEFAULT_TIMEZONE || 'Asia/Shanghai';
 const IMAGE_BASE_URL = process.env.TMDB_IMAGE_BASE_URL || 'https://image.tmdb.org/t/p';
+const PUBLIC_API_BASE_URL = process.env.TMDB_PUBLIC_API_BASE_URL || 'https://blog.feroad.com';
+const IMAGE_PROXY_BASE_URL = process.env.TMDB_IMAGE_PROXY_BASE_URL || PUBLIC_API_BASE_URL + '/blogapi/ent/image';
 const REQUEST_TIMEOUT = Number(process.env.TMDB_REQUEST_TIMEOUT || 8000);
 const BASE_URL_HOSTNAME = new URL(BASE_URL).hostname;
 
@@ -115,7 +117,48 @@ function getImageUrl(path, size) {
     if (!path) {
         return '';
     }
-    return IMAGE_BASE_URL + '/' + (size || 'w342') + path;
+    return IMAGE_PROXY_BASE_URL + '/' + (size || 'w342') + path;
+}
+
+function requestTmdbImage(size, file) {
+    const url = new URL(IMAGE_BASE_URL + '/' + size + '/' + file);
+
+    return new Promise((resolve, reject) => {
+        const req = https.request(url, { method: 'GET', timeout: REQUEST_TIMEOUT }, res => {
+            const chunks = [];
+
+            res.on('data', chunk => {
+                chunks.push(chunk);
+            });
+
+            res.on('end', () => {
+                if (res.statusCode >= 400) {
+                    const error = new Error('TMDB image request failed with status ' + res.statusCode);
+                    error.statusCode = res.statusCode;
+                    error.publicMessage = '图片暂时不可用';
+                    reject(error);
+                    return;
+                }
+
+                resolve({
+                    contentType: res.headers['content-type'] || 'image/jpeg',
+                    cacheControl: res.headers['cache-control'] || 'public, max-age=604800',
+                    body: Buffer.concat(chunks)
+                });
+            });
+        });
+
+        req.on('timeout', () => {
+            req.destroy(new Error('TMDB image request timeout'));
+        });
+
+        req.on('error', err => {
+            err.publicMessage = '图片暂时不可用';
+            reject(err);
+        });
+
+        req.end();
+    });
 }
 
 module.exports = {
@@ -123,5 +166,6 @@ module.exports = {
     DEFAULT_REGION,
     DEFAULT_TIMEZONE,
     requestTmdb,
+    requestTmdbImage,
     getImageUrl
 };

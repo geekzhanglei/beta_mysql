@@ -1,5 +1,5 @@
 const router = require('koa-router')();
-const { requestTmdb, DEFAULT_REGION, DEFAULT_TIMEZONE } = require('../services/tmdbClient');
+const { requestTmdb, requestTmdbImage, DEFAULT_REGION, DEFAULT_TIMEZONE } = require('../services/tmdbClient');
 const {
     getApiCache,
     setApiCache,
@@ -22,6 +22,9 @@ const TTL = {
 };
 
 router.prefix('/blogapi/ent');
+
+const IMAGE_SIZE_RE = /^[a-zA-Z0-9_]+$/;
+const IMAGE_FILE_RE = /^[a-zA-Z0-9._-]+$/;
 
 function getPage(ctx) {
     const page = Number(ctx.request.query.page || 1);
@@ -281,6 +284,27 @@ router.get('/health', async ctx => {
             cacheDatabase: process.env.TMDB_DB_DATABASE || 'tmdb_movie_calendar'
         }
     };
+});
+
+router.get('/image/:size/:file', async ctx => {
+    const size = String(ctx.params.size || '');
+    const file = String(ctx.params.file || '');
+
+    if (!IMAGE_SIZE_RE.test(size) || !IMAGE_FILE_RE.test(file)) {
+        ctx.status = 400;
+        ctx.body = { code: 1, msg: '图片参数不合法' };
+        return;
+    }
+
+    try {
+        const image = await requestTmdbImage(size, file);
+
+        ctx.type = image.contentType;
+        ctx.set('Cache-Control', image.cacheControl);
+        ctx.body = image.body;
+    } catch (err) {
+        fail(ctx, err);
+    }
 });
 
 router.get('/movies/now-playing', async ctx => {
