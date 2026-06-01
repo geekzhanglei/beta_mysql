@@ -1,7 +1,7 @@
 const router = require('koa-router')();
 const { requestTmdb, requestTmdbImage, DEFAULT_REGION, DEFAULT_TIMEZONE } = require('../services/tmdbClient');
 const {
-    getApiCache,
+    getApiCacheEntry,
     setApiCache,
     upsertMediaList,
     upsertCalendarList,
@@ -20,6 +20,8 @@ const TTL = {
     SEASON: 12 * 60 * 60,
     EPISODE_CALENDAR: 3 * 60 * 60
 };
+const STALE_REFRESH_TIMEOUT = Number(process.env.TMDB_STALE_REFRESH_TIMEOUT || 1000);
+const refreshTasks = new Map();
 
 router.prefix('/blogapi/ent');
 
@@ -54,23 +56,119 @@ function makeCacheKey(name, params) {
     return name + ':' + query;
 }
 
-async function getCachedTmdbPayload(cacheKey, apiPath, params, ttlSeconds) {
-    const cached = await getApiCache(cacheKey);
+function withTimeout(promise, timeoutMs) {
+    return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+            const error = new Error('cache refresh timeout');
+            error.isTimeout = true;
+            reject(error);
+        }, timeoutMs);
 
-    if (cached) {
+        promise.then(
+            value => {
+                clearTimeout(timer);
+                resolve(value);
+            },
+            err => {
+                clearTimeout(timer);
+                reject(err);
+            }
+        );
+    });
+}
+
+function runRefreshTask(cacheKey, refreshFn) {
+    if (refreshTasks.has(cacheKey)) {
+        return refreshTasks.get(cacheKey);
+    }
+
+    const task = refreshFn()
+        .catch(err => {
+            console.error('[ent] cache refresh failed', cacheKey, err.message);
+            throw err;
+        })
+        .finally(() => {
+            refreshTasks.delete(cacheKey);
+        });
+
+    refreshTasks.set(cacheKey, task);
+    return task;
+}
+
+async function getCachedTmdbPayload(cacheKey, apiPath, params, ttlSeconds, options) {
+    const cached = await getApiCacheEntry(cacheKey);
+    const refreshPayload = async () => {
+        const payload = await requestTmdb(apiPath, params);
+
+        await setApiCache(cacheKey, payload, ttlSeconds);
+        if (options && typeof options.onRefreshPayload === 'function') {
+            await options.onRefreshPayload(payload);
+        }
+
+        return {
+            source: 'tmdb',
+            payload
+        };
+    };
+
+    if (cached && cached.isFresh && !(options && options.forceRefresh)) {
         return {
             source: 'cache',
-            payload: cached
+            payload: cached.payload
         };
     }
 
-    const payload = await requestTmdb(apiPath, params);
-    await setApiCache(cacheKey, payload, ttlSeconds);
+    if (cached && !(options && options.forceRefresh)) {
+        const refreshTask = runRefreshTask(cacheKey, refreshPayload);
 
-    return {
-        source: 'tmdb',
-        payload
+        try {
+            return await withTimeout(refreshTask, STALE_REFRESH_TIMEOUT);
+        } catch (err) {
+            return {
+                source: 'stale-cache',
+                payload: cached.payload,
+                refreshPending: true
+            };
+        }
+    }
+
+    return refreshPayload();
+}
+
+async function getCachedResponsePayload(cacheKey, createPayload, ttlSeconds) {
+    const cached = await getApiCacheEntry(cacheKey);
+    const refreshPayload = async () => {
+        const payload = await createPayload();
+
+        await setApiCache(cacheKey, payload, ttlSeconds);
+        return {
+            source: 'tmdb',
+            payload
+        };
     };
+
+    if (cached && cached.isFresh) {
+        return {
+            source: 'cache',
+            payload: cached.payload
+        };
+    }
+
+    if (cached) {
+        const refreshTask = runRefreshTask(cacheKey, refreshPayload);
+
+        try {
+            return await withTimeout(refreshTask, STALE_REFRESH_TIMEOUT);
+        } catch (err) {
+            return {
+                source: 'stale-cache',
+                payload: cached.payload,
+                refreshPending: true
+            };
+        }
+    }
+
+    return refreshPayload();
 }
 
 function ok(ctx, data, source) {
@@ -91,16 +189,17 @@ function fail(ctx, err) {
 
 async function listHandler(ctx, options) {
     try {
-        const cachedResult = await getCachedTmdbPayload(options.cacheKey, options.apiPath, options.params, options.ttl);
-        const payload = cachedResult.payload;
-        const items = Array.isArray(payload.results) ? payload.results : [];
+        const cachedResult = await getCachedTmdbPayload(options.cacheKey, options.apiPath, options.params, options.ttl, {
+            onRefreshPayload: async payload => {
+                const items = Array.isArray(payload.results) ? payload.results : [];
 
-        if (cachedResult.source === 'tmdb') {
-            await upsertMediaList(items, options.mediaType);
-            if (options.calendar) {
-                await upsertCalendarList(items, options.calendar);
+                await upsertMediaList(items, options.mediaType);
+                if (options.calendar) {
+                    await upsertCalendarList(items, options.calendar);
+                }
             }
-        }
+        });
+        const payload = cachedResult.payload;
 
         ok(ctx, normalizeList(payload, options.mediaType), cachedResult.source);
     } catch (err) {
@@ -136,10 +235,12 @@ async function getTvDetailPayload(id) {
     const params = {
         append_to_response: 'content_ratings,external_ids'
     };
-    const cachedResult = await getCachedTmdbPayload(makeCacheKey('tv_detail', { id }), '/tv/' + id, params, TTL.DETAIL);
-
-    await upsertMediaList([cachedResult.payload], 'tv');
-    await upsertDetailEpisodes(id, cachedResult.payload);
+    const cachedResult = await getCachedTmdbPayload(makeCacheKey('tv_detail', { id }), '/tv/' + id, params, TTL.DETAIL, {
+        onRefreshPayload: async payload => {
+            await upsertMediaList([payload], 'tv');
+            await upsertDetailEpisodes(id, payload);
+        }
+    });
 
     return cachedResult;
 }
@@ -164,14 +265,17 @@ async function getTvSeasonPayload(id, seasonNumber) {
         makeCacheKey('tv_season', { id, seasonNumber }),
         '/tv/' + id + '/season/' + seasonNumber,
         {},
-        TTL.SEASON
+        TTL.SEASON,
+        {
+            onRefreshPayload: async payload => {
+                try {
+                    await upsertSeasonPayload(id, payload, TTL.SEASON);
+                } catch (err) {
+                    console.error('[ent] season cache write skipped', id, seasonNumber, err.message);
+                }
+            }
+        }
     );
-
-    try {
-        await upsertSeasonPayload(id, cachedResult.payload, TTL.SEASON);
-    } catch (err) {
-        console.error('[ent] season cache write skipped', id, seasonNumber, err.message);
-    }
 
     return cachedResult;
 }
@@ -375,10 +479,11 @@ router.get('/movie/:id', async ctx => {
     const cacheKey = makeCacheKey('movie_detail', { id });
 
     try {
-        const cachedResult = await getCachedTmdbPayload(cacheKey, '/movie/' + id, params, TTL.DETAIL);
-        if (cachedResult.source === 'tmdb') {
-            await upsertMediaList([cachedResult.payload], 'movie');
-        }
+        const cachedResult = await getCachedTmdbPayload(cacheKey, '/movie/' + id, params, TTL.DETAIL, {
+            onRefreshPayload: async payload => {
+                await upsertMediaList([payload], 'movie');
+            }
+        });
         ok(ctx, { detail: normalizeDetail(cachedResult.payload, 'movie') }, cachedResult.source);
     } catch (err) {
         fail(ctx, err);
@@ -466,45 +571,43 @@ router.get('/tv/episode-calendar', async ctx => {
     }));
 
     try {
-        const cachedResponse = await getApiCache(responseCacheKey);
+        const responseResult = await getCachedResponsePayload(responseCacheKey, async () => {
+            const cachedResult = await getCachedTmdbPayload(
+                makeCacheKey('tv_calendar', params),
+                '/discover/tv',
+                params,
+                TTL.TODAY,
+                {
+                    forceRefresh: true,
+                    onRefreshPayload: async payload => {
+                        const items = Array.isArray(payload.results) ? payload.results : [];
 
-        if (cachedResponse) {
-            ok(ctx, cachedResponse, 'cache');
-            return;
-        }
+                        await upsertMediaList(items, 'tv');
+                        await upsertCalendarList(items, {
+                            mediaType: 'tv',
+                            eventType: 'calendar',
+                            eventDate: date,
+                            timezone: params.timezone
+                        });
+                    }
+                }
+            );
+            const payload = cachedResult.payload;
 
-        const cachedResult = await getCachedTmdbPayload(
-            makeCacheKey('tv_calendar', params),
-            '/discover/tv',
-            params,
-            TTL.TODAY
-        );
-        const payload = cachedResult.payload;
-        const items = Array.isArray(payload.results) ? payload.results : [];
+            const normalized = normalizeList(payload, 'tv');
+            const list = await enrichEpisodeCalendarList(normalized.list, date, episodeResolveLimit);
 
-        if (cachedResult.source === 'tmdb') {
-            await upsertMediaList(items, 'tv');
-            await upsertCalendarList(items, {
-                mediaType: 'tv',
-                eventType: 'calendar',
-                eventDate: date,
-                timezone: params.timezone
-            });
-        }
+            return {
+                page: normalized.page,
+                totalPages: normalized.totalPages,
+                totalResults: normalized.totalResults,
+                episodeResolveLimit,
+                episodeResolvedCount: list.filter(item => item.hasEpisode).length,
+                list
+            };
+        }, TTL.EPISODE_CALENDAR);
 
-        const normalized = normalizeList(payload, 'tv');
-        const list = await enrichEpisodeCalendarList(normalized.list, date, episodeResolveLimit);
-        const data = {
-            page: normalized.page,
-            totalPages: normalized.totalPages,
-            totalResults: normalized.totalResults,
-            episodeResolveLimit,
-            episodeResolvedCount: list.filter(item => item.hasEpisode).length,
-            list
-        };
-
-        await setApiCache(responseCacheKey, data, TTL.EPISODE_CALENDAR);
-        ok(ctx, data, cachedResult.source);
+        ok(ctx, responseResult.payload, responseResult.source);
     } catch (err) {
         fail(ctx, err);
     }

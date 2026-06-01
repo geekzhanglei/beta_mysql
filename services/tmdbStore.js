@@ -101,16 +101,28 @@ async function ensureEpisodeTables() {
 }
 
 async function getApiCache(cacheKey) {
+    const cached = await getApiCacheEntry(cacheKey);
+
+    return cached && cached.isFresh ? cached.payload : null;
+}
+
+async function getApiCacheEntry(cacheKey) {
     const rows = await tmdbQuery(
         'SELECT payload_json, expires_at FROM tmdb_api_cache WHERE cache_key = ? LIMIT 1',
         [cacheKey]
     );
 
-    if (!rows.length || new Date(rows[0].expires_at).getTime() <= Date.now()) {
+    if (!rows.length) {
         return null;
     }
 
-    return JSON.parse(rows[0].payload_json);
+    const expiresAt = new Date(rows[0].expires_at).getTime();
+
+    return {
+        payload: JSON.parse(rows[0].payload_json),
+        expiresAt,
+        isFresh: expiresAt > Date.now()
+    };
 }
 
 async function setApiCache(cacheKey, payload, ttlSeconds) {
@@ -121,6 +133,14 @@ async function setApiCache(cacheKey, payload, ttlSeconds) {
             'ON DUPLICATE KEY UPDATE payload_json = VALUES(payload_json), expires_at = VALUES(expires_at), updated_at = CURRENT_TIMESTAMP',
         [cacheKey, JSON.stringify(payload), toMysqlDatetime(expiresAt)]
     );
+}
+
+async function cleanupExpiredApiCache() {
+    const result = await tmdbQuery(
+        'DELETE FROM tmdb_api_cache WHERE expires_at < DATE_SUB(NOW(), INTERVAL 7 DAY)'
+    );
+
+    return result && result.affectedRows ? result.affectedRows : 0;
 }
 
 async function upsertMedia(item, mediaType) {
@@ -315,7 +335,9 @@ async function getEpisodeCacheByAirDate(tvId, airDate) {
 
 module.exports = {
     getApiCache,
+    getApiCacheEntry,
     setApiCache,
+    cleanupExpiredApiCache,
     upsertMediaList,
     upsertCalendarList,
     getSeasonCache,

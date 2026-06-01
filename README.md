@@ -34,6 +34,16 @@ GET /blogapi/ent/image/w342/example.jpg
 
 图片代理会落盘缓存到 `public/tmdb-image-cache/`，默认容量上限 2GB，超过后按最久未访问/修改的文件优先清理。可通过 `TMDB_IMAGE_CACHE_DIR` 和 `TMDB_IMAGE_CACHE_MAX_BYTES` 调整。列表页默认返回 `w185` 小海报，详情页使用更清晰的 `w342` 海报和 `w780` 背景。
 
+API 缓存支持 stale fallback：缓存过期时，服务端最多等待 `TMDB_STALE_REFRESH_TIMEOUT` 毫秒（默认 1000）尝试回源；超时或失败则先返回旧缓存，同时后台刷新并落库，下一次请求自然命中新数据。
+
+缓存预热脚本：
+
+```bash
+yarn run warm-tmdb-cache
+```
+
+脚本会预热热映、即将上映、趋势、今日播出、未来 7 天剧集排期和 episode 日历，并触发部分图片落盘缓存。可通过 `TMDB_WARM_DAYS`、`TMDB_WARM_REGIONS`、`TMDB_WARM_IMAGE_LIMIT`、`TMDB_WARM_API_BASE_URL` 调整。脚本启动时会清理 7 天前已过期的 `tmdb_api_cache`。
+
 生产环境建议先执行 `sql/tmdb_movie_calendar.sql` 完成表结构迁移。运行时默认不会自动建表；仅在开发环境需要自动建表时，才配置 `TMDB_ENSURE_EPISODE_TABLES=1`。
 
 # 接口文档

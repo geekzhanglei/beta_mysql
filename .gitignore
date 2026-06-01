@@ -2,6 +2,7 @@
 node_modules
 /dist
 /public/upload/
+/public/tmdb-image-cache/
 .env
 
 # local env files
