@@ -21,7 +21,8 @@ const TTL = {
     EPISODE_CALENDAR: 3 * 60 * 60
 };
 const STALE_REFRESH_TIMEOUT = Number(process.env.TMDB_STALE_REFRESH_TIMEOUT || 1000);
-const EPISODE_CALENDAR_CACHE_VERSION = 'v2';
+const EPISODE_CALENDAR_CACHE_VERSION = 'v3';
+const EXCLUDED_TV_GENRE_IDS = [10763, 10764, 10767];
 const refreshTasks = new Map();
 
 router.prefix('/blogapi/ent');
@@ -265,6 +266,22 @@ function fail(ctx, err) {
     };
 }
 
+function isScriptedTvItem(item) {
+    const genreIds = Array.isArray(item && item.genreIds) ? item.genreIds : [];
+
+    return !genreIds.some(id => EXCLUDED_TV_GENRE_IDS.indexOf(Number(id)) !== -1);
+}
+
+function filterPublicList(data, mediaType) {
+    if (mediaType !== 'tv' || !Array.isArray(data.list)) {
+        return data;
+    }
+
+    data.list = data.list.filter(isScriptedTvItem);
+    data.totalResults = data.list.length;
+    return data;
+}
+
 async function listHandler(ctx, options) {
     try {
         const cachedResult = await getCachedTmdbPayload(options.cacheKey, options.apiPath, options.params, options.ttl, {
@@ -278,8 +295,9 @@ async function listHandler(ctx, options) {
             }
         });
         const payload = cachedResult.payload;
+        const data = filterPublicList(normalizeList(payload, options.mediaType), options.mediaType);
 
-        ok(ctx, normalizeList(payload, options.mediaType), cachedResult.source);
+        ok(ctx, data, cachedResult.source);
     } catch (err) {
         fail(ctx, err);
     }
@@ -710,7 +728,7 @@ router.get('/tv/episode-calendar', async ctx => {
             );
             const payload = cachedResult.payload;
 
-            const normalized = normalizeList(payload, 'tv');
+            const normalized = filterPublicList(normalizeList(payload, 'tv'), 'tv');
             const list = await enrichEpisodeCalendarList(normalized.list, date, params.timezone, episodeResolveLimit);
 
             return {
