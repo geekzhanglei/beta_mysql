@@ -6,7 +6,8 @@ const tmdbMysqlConfig = {
     password: process.env.TMDB_DB_PASSWORD || process.env.DB_PASSWORD || '',
     database: process.env.TMDB_DB_DATABASE || 'tmdb_movie_calendar',
     host: process.env.TMDB_DB_HOST || process.env.DB_HOST || '211.159.169.12',
-    port: process.env.TMDB_DB_PORT || process.env.DB_PORT || '3306'
+    port: process.env.TMDB_DB_PORT || process.env.DB_PORT || '3306',
+    charset: 'utf8mb4'
 };
 
 module.exports = tmdbMysqlConfig;

@@ -13,6 +13,7 @@ const REQUEST_TIMEOUT = Number(process.env.TMDB_REQUEST_TIMEOUT || 8000);
 const IMAGE_CACHE_MAX_BYTES = Number(process.env.TMDB_IMAGE_CACHE_MAX_BYTES || 2 * 1024 * 1024 * 1024);
 const IMAGE_CACHE_DIR = process.env.TMDB_IMAGE_CACHE_DIR || path.join(__dirname, '..', 'public', 'tmdb-image-cache');
 const BASE_URL_HOSTNAME = new URL(BASE_URL).hostname;
+let imageCacheCleanupTask = null;
 
 function getCredential() {
     return {
@@ -177,7 +178,21 @@ async function listCachedFiles(dir) {
         }
 
         if (entry.isFile()) {
-            const stat = await fs.promises.stat(fullPath);
+            if (entry.name.indexOf('.tmp-') !== -1) {
+                continue;
+            }
+
+            let stat;
+
+            try {
+                stat = await fs.promises.stat(fullPath);
+            } catch (err) {
+                if (err.code === 'ENOENT') {
+                    continue;
+                }
+                throw err;
+            }
+
             files.push({
                 path: fullPath,
                 size: stat.size,
@@ -208,21 +223,36 @@ async function enforceImageCacheLimit() {
             await fs.promises.unlink(files[i].path);
             total -= files[i].size;
         } catch (err) {
+            if (err.code === 'ENOENT') {
+                continue;
+            }
             console.error('[tmdb-image-cache] remove failed', files[i].path, err.message);
         }
     }
 }
 
+function triggerImageCacheCleanup() {
+    if (imageCacheCleanupTask) {
+        return;
+    }
+
+    imageCacheCleanupTask = enforceImageCacheLimit()
+        .catch(err => {
+            console.error('[tmdb-image-cache] cleanup failed', err.message);
+        })
+        .finally(() => {
+            imageCacheCleanupTask = null;
+        });
+}
+
 async function writeCachedImage(size, file, image) {
     const cachePath = getImageCachePath(size, file);
-    const tmpPath = cachePath + '.tmp-' + Date.now();
+    const tmpPath = cachePath + '.tmp-' + process.pid + '-' + Date.now() + '-' + Math.random().toString(16).slice(2);
 
     await fs.promises.mkdir(path.dirname(cachePath), { recursive: true });
     await fs.promises.writeFile(tmpPath, image.body);
     await fs.promises.rename(tmpPath, cachePath);
-    enforceImageCacheLimit().catch(err => {
-        console.error('[tmdb-image-cache] cleanup failed', err.message);
-    });
+    triggerImageCacheCleanup();
 }
 
 function fetchTmdbImage(size, file) {
