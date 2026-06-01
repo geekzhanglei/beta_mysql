@@ -235,12 +235,17 @@ async function getTvDetailPayload(id) {
     const params = {
         append_to_response: 'content_ratings,external_ids'
     };
+    const persistPayload = async payload => {
+        await upsertMediaList([payload], 'tv');
+        await upsertDetailEpisodes(id, payload);
+    };
     const cachedResult = await getCachedTmdbPayload(makeCacheKey('tv_detail', { id }), '/tv/' + id, params, TTL.DETAIL, {
-        onRefreshPayload: async payload => {
-            await upsertMediaList([payload], 'tv');
-            await upsertDetailEpisodes(id, payload);
-        }
+        onRefreshPayload: persistPayload
     });
+
+    if (cachedResult.source !== 'tmdb') {
+        await persistPayload(cachedResult.payload);
+    }
 
     return cachedResult;
 }
@@ -261,21 +266,26 @@ async function getTvSeasonPayload(id, seasonNumber) {
         };
     }
 
+    const persistPayload = async payload => {
+        try {
+            await upsertSeasonPayload(id, payload, TTL.SEASON);
+        } catch (err) {
+            console.error('[ent] season cache write skipped', id, seasonNumber, err.message);
+        }
+    };
     const cachedResult = await getCachedTmdbPayload(
         makeCacheKey('tv_season', { id, seasonNumber }),
         '/tv/' + id + '/season/' + seasonNumber,
         {},
         TTL.SEASON,
         {
-            onRefreshPayload: async payload => {
-                try {
-                    await upsertSeasonPayload(id, payload, TTL.SEASON);
-                } catch (err) {
-                    console.error('[ent] season cache write skipped', id, seasonNumber, err.message);
-                }
-            }
+            onRefreshPayload: persistPayload
         }
     );
+
+    if (cachedResult.source !== 'tmdb') {
+        await persistPayload(cachedResult.payload);
+    }
 
     return cachedResult;
 }

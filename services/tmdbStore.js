@@ -318,7 +318,12 @@ async function upsertSeasonPayload(tvId, season, ttlSeconds) {
         const episode = Object.assign({}, episodes[i], {
             season_number: episodes[i].season_number || seasonNumber
         });
-        await upsertEpisodePayload(tvId, episode, ttlSeconds);
+
+        try {
+            await upsertEpisodePayload(tvId, episode, ttlSeconds);
+        } catch (err) {
+            console.error('[tmdb-store] episode cache write skipped', tvId, seasonNumber, err.message);
+        }
     }
 }
 
