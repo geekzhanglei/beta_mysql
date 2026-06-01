@@ -21,7 +21,8 @@ const TTL = {
     EPISODE_CALENDAR: 3 * 60 * 60
 };
 const STALE_REFRESH_TIMEOUT = Number(process.env.TMDB_STALE_REFRESH_TIMEOUT || 1000);
-const EPISODE_CALENDAR_CACHE_VERSION = 'v3';
+const EPISODE_CALENDAR_CACHE_VERSION = 'v4';
+const TV_CALENDAR_PAGE_LIMIT = Math.min(Math.max(Number(process.env.TMDB_TV_CALENDAR_PAGE_LIMIT || 5), 1), 10);
 const EXCLUDED_TV_GENRE_IDS = [10763, 10764, 10767];
 const refreshTasks = new Map();
 
@@ -282,6 +283,44 @@ function filterPublicList(data, mediaType) {
     return data;
 }
 
+function sortListByRating(data) {
+    if (!Array.isArray(data.list)) {
+        return data;
+    }
+
+    data.list = data.list.slice().sort((a, b) => {
+        const ratingDiff = Number(b.voteAverage || 0) - Number(a.voteAverage || 0);
+
+        if (ratingDiff) {
+            return ratingDiff;
+        }
+        return Number(b.popularity || 0) - Number(a.popularity || 0);
+    });
+    return data;
+}
+
+function mergePagedPayloads(payloads) {
+    const seen = new Set();
+    const results = [];
+
+    payloads.forEach(payload => {
+        (Array.isArray(payload && payload.results) ? payload.results : []).forEach(item => {
+            if (!item || seen.has(item.id)) {
+                return;
+            }
+            seen.add(item.id);
+            results.push(item);
+        });
+    });
+
+    return {
+        page: 1,
+        total_pages: Math.max.apply(null, payloads.map(payload => Number(payload.total_pages || 0)).concat([1])),
+        total_results: results.length,
+        results
+    };
+}
+
 async function listHandler(ctx, options) {
     try {
         const cachedResult = await getCachedTmdbPayload(options.cacheKey, options.apiPath, options.params, options.ttl, {
@@ -301,6 +340,42 @@ async function listHandler(ctx, options) {
     } catch (err) {
         fail(ctx, err);
     }
+}
+
+async function getTvCalendarPayload(params, date, ttlSeconds) {
+    const payloads = [];
+
+    for (let page = 1; page <= TV_CALENDAR_PAGE_LIMIT; page++) {
+        const pageParams = Object.assign({}, params, { page });
+        const cachedResult = await getCachedTmdbPayload(
+            makeCacheKey('tv_calendar', pageParams),
+            '/discover/tv',
+            pageParams,
+            ttlSeconds,
+            {
+                forceRefresh: true,
+                onRefreshPayload: async payload => {
+                    const items = Array.isArray(payload.results) ? payload.results : [];
+
+                    await upsertMediaList(items, 'tv');
+                    await upsertCalendarList(items, {
+                        mediaType: 'tv',
+                        eventType: 'calendar',
+                        eventDate: date,
+                        timezone: params.timezone
+                    });
+                }
+            }
+        );
+
+        payloads.push(cachedResult.payload);
+
+        if (page >= Number(cachedResult.payload.total_pages || 0)) {
+            break;
+        }
+    }
+
+    return mergePagedPayloads(payloads);
 }
 
 function sameDate(value, date) {
@@ -330,11 +405,11 @@ function markCalendarItem(item, calendarDate, timezone) {
 }
 
 function getEpisodeResolveLimit(ctx) {
-    const configured = Number(process.env.TMDB_EPISODE_RESOLVE_LIMIT || 8);
+    const configured = Number(process.env.TMDB_EPISODE_RESOLVE_LIMIT || 40);
     const requested = Number(ctx.request.query.episodeLimit || configured);
     const limit = requested > 0 ? requested : configured;
 
-    return Math.min(limit, 12);
+    return Math.min(limit, 60);
 }
 
 async function upsertDetailEpisodes(tvId, payload) {
@@ -693,7 +768,6 @@ router.get('/tv/episode-calendar', async ctx => {
     const date = getDateParam(ctx);
     const episodeResolveLimit = getEpisodeResolveLimit(ctx);
     const params = {
-        page: getPage(ctx),
         timezone: getTimezone(ctx),
         'air_date.gte': date,
         'air_date.lte': date,
@@ -701,40 +775,21 @@ router.get('/tv/episode-calendar', async ctx => {
     };
     const responseCacheKey = makeCacheKey('tv_episode_calendar', Object.assign({}, params, {
         episodeResolveLimit,
+        pageLimit: TV_CALENDAR_PAGE_LIMIT,
         version: EPISODE_CALENDAR_CACHE_VERSION
     }));
 
     try {
         const responseResult = await getCachedResponsePayload(responseCacheKey, async () => {
-            const cachedResult = await getCachedTmdbPayload(
-                makeCacheKey('tv_calendar', params),
-                '/discover/tv',
-                params,
-                TTL.TODAY,
-                {
-                    forceRefresh: true,
-                    onRefreshPayload: async payload => {
-                        const items = Array.isArray(payload.results) ? payload.results : [];
-
-                        await upsertMediaList(items, 'tv');
-                        await upsertCalendarList(items, {
-                            mediaType: 'tv',
-                            eventType: 'calendar',
-                            eventDate: date,
-                            timezone: params.timezone
-                        });
-                    }
-                }
-            );
-            const payload = cachedResult.payload;
-
-            const normalized = filterPublicList(normalizeList(payload, 'tv'), 'tv');
+            const payload = await getTvCalendarPayload(params, date, TTL.TODAY);
+            const normalized = sortListByRating(filterPublicList(normalizeList(payload, 'tv'), 'tv'));
             const list = await enrichEpisodeCalendarList(normalized.list, date, params.timezone, episodeResolveLimit);
 
             return {
                 page: normalized.page,
                 totalPages: normalized.totalPages,
                 totalResults: normalized.totalResults,
+                scannedPages: TV_CALENDAR_PAGE_LIMIT,
                 episodeResolveLimit,
                 episodeResolvedCount: list.filter(item => item.hasEpisode).length,
                 list: list.map(item => markCalendarItem(item, date, params.timezone))

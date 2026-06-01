@@ -21,6 +21,7 @@ const REGIONS = (process.env.TMDB_WARM_REGIONS || 'CN,US,JP,KR,GB').split(',').m
 const WARM_DAYS = Number(process.env.TMDB_WARM_DAYS || 7);
 const IMAGE_LIMIT_PER_ENDPOINT = Number(process.env.TMDB_WARM_IMAGE_LIMIT || 12);
 const REQUEST_TIMEOUT = Number(process.env.TMDB_WARM_REQUEST_TIMEOUT || 20000);
+const EPISODE_LIMIT = Number(process.env.TMDB_WARM_EPISODE_LIMIT || 40);
 
 function pad(num) {
     return String(num).padStart(2, '0');
@@ -144,7 +145,7 @@ async function main() {
         const date = dateValue(i);
 
         endpoints.push('/blogapi/ent/tv/calendar?date=' + date + '&timezone=' + encodeURIComponent(TIMEZONE));
-        endpoints.push('/blogapi/ent/tv/episode-calendar?date=' + date + '&timezone=' + encodeURIComponent(TIMEZONE) + '&episodeLimit=8');
+        endpoints.push('/blogapi/ent/tv/episode-calendar?date=' + date + '&timezone=' + encodeURIComponent(TIMEZONE) + '&episodeLimit=' + EPISODE_LIMIT);
     }
 
     const cleaned = await cleanupExpiredApiCache();
