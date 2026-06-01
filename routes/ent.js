@@ -21,6 +21,7 @@ const TTL = {
     EPISODE_CALENDAR: 3 * 60 * 60
 };
 const STALE_REFRESH_TIMEOUT = Number(process.env.TMDB_STALE_REFRESH_TIMEOUT || 1000);
+const EPISODE_CALENDAR_CACHE_VERSION = 'v2';
 const refreshTasks = new Map();
 
 router.prefix('/blogapi/ent');
@@ -41,13 +42,90 @@ function getTimezone(ctx) {
     return String(ctx.request.query.timezone || DEFAULT_TIMEZONE);
 }
 
+function dateToValue(date) {
+    return [
+        date.getFullYear(),
+        String(date.getMonth() + 1).padStart(2, '0'),
+        String(date.getDate()).padStart(2, '0')
+    ].join('-');
+}
+
+function shiftDate(value, offset) {
+    const parts = String(value || '').split('-').map(Number);
+    const date = new Date(parts[0], parts[1] - 1, parts[2] + offset);
+
+    return dateToValue(date);
+}
+
+function getTodayValue(timezone) {
+    try {
+        const parts = new Intl.DateTimeFormat('en-US', {
+            timeZone: timezone || DEFAULT_TIMEZONE,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        }).formatToParts(new Date()).reduce((result, part) => {
+            result[part.type] = part.value;
+            return result;
+        }, {});
+
+        return parts.year + '-' + parts.month + '-' + parts.day;
+    } catch (err) {
+        return dateToValue(new Date());
+    }
+}
+
 function getDateParam(ctx) {
     const value = String(ctx.request.query.date || '');
     if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
         return value;
     }
 
-    return new Date().toISOString().slice(0, 10);
+    return getTodayValue(getTimezone(ctx));
+}
+
+function getTimezoneOffsetMinutes(timezone, dateValue) {
+    try {
+        const date = new Date(dateValue + 'T12:00:00Z');
+        const parts = new Intl.DateTimeFormat('en-US', {
+            timeZone: timezone || DEFAULT_TIMEZONE,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false
+        }).formatToParts(date).reduce((result, part) => {
+            result[part.type] = part.value;
+            return result;
+        }, {});
+        const zonedTime = Date.UTC(
+            Number(parts.year),
+            Number(parts.month) - 1,
+            Number(parts.day),
+            Number(parts.hour),
+            Number(parts.minute),
+            Number(parts.second)
+        );
+
+        return Math.round((zonedTime - date.getTime()) / 60000);
+    } catch (err) {
+        return 0;
+    }
+}
+
+function getAirDateCandidates(date, timezone) {
+    const candidates = [date];
+    const offset = getTimezoneOffsetMinutes(timezone, date);
+
+    if (offset > 0) {
+        candidates.push(shiftDate(date, -1));
+    } else if (offset < 0) {
+        candidates.push(shiftDate(date, 1));
+    }
+
+    return Array.from(new Set(candidates));
 }
 
 function makeCacheKey(name, params) {
@@ -211,6 +289,28 @@ function sameDate(value, date) {
     return value && String(value).slice(0, 10) === date;
 }
 
+function hasAirDate(value, candidates) {
+    return value && candidates.indexOf(String(value).slice(0, 10)) !== -1;
+}
+
+function markCalendarEpisode(episode, calendarDate) {
+    if (!episode) {
+        return null;
+    }
+
+    episode.calendarDate = calendarDate;
+    episode.isTimezoneShifted = !!episode.airDate && episode.airDate !== calendarDate;
+    return episode;
+}
+
+function markCalendarItem(item, calendarDate, timezone) {
+    item.calendarDate = calendarDate;
+    item.timezone = timezone;
+    item.episodes = (item.episodes || []).map(episode => markCalendarEpisode(episode, calendarDate)).filter(Boolean);
+    item.episode = item.episode ? markCalendarEpisode(item.episode, calendarDate) : null;
+    return item;
+}
+
 function getEpisodeResolveLimit(ctx) {
     const configured = Number(process.env.TMDB_EPISODE_RESOLVE_LIMIT || 8);
     const requested = Number(ctx.request.query.episodeLimit || configured);
@@ -290,14 +390,14 @@ async function getTvSeasonPayload(id, seasonNumber) {
     return cachedResult;
 }
 
-function chooseSeasonNumberForDate(detailPayload, date) {
+function chooseSeasonNumberForDate(detailPayload, date, airDateCandidates) {
     const nextEpisode = detailPayload.next_episode_to_air;
     const lastEpisode = detailPayload.last_episode_to_air;
 
-    if (sameDate(nextEpisode && nextEpisode.air_date, date)) {
+    if (hasAirDate(nextEpisode && nextEpisode.air_date, airDateCandidates)) {
         return Number(nextEpisode.season_number || 0);
     }
-    if (sameDate(lastEpisode && lastEpisode.air_date, date)) {
+    if (hasAirDate(lastEpisode && lastEpisode.air_date, airDateCandidates)) {
         return Number(lastEpisode.season_number || 0);
     }
 
@@ -317,21 +417,24 @@ function chooseSeasonNumberForDate(detailPayload, date) {
     return 0;
 }
 
-async function findEpisodesForDate(tvId, date, detailPayload) {
+async function findEpisodesForDate(tvId, date, timezone, detailPayload) {
+    const airDateCandidates = getAirDateCandidates(date, timezone);
     let episodeCache = [];
 
     try {
-        episodeCache = await getEpisodeCacheByAirDate(tvId, date);
+        for (let i = 0; i < airDateCandidates.length; i++) {
+            episodeCache = episodeCache.concat(await getEpisodeCacheByAirDate(tvId, airDateCandidates[i]));
+        }
     } catch (err) {
         console.error('[ent] episode cache read skipped', tvId, date, err.message);
     }
 
     if (episodeCache.length) {
-        return episodeCache.map(item => normalizeEpisode(item, tvId)).filter(Boolean);
+        return episodeCache.map(item => markCalendarEpisode(normalizeEpisode(item, tvId), date)).filter(Boolean);
     }
 
     const detailEpisodes = [detailPayload.next_episode_to_air, detailPayload.last_episode_to_air]
-        .filter(item => sameDate(item && item.air_date, date));
+        .filter(item => hasAirDate(item && item.air_date, airDateCandidates));
 
     if (detailEpisodes.length) {
         for (let i = 0; i < detailEpisodes.length; i++) {
@@ -341,10 +444,10 @@ async function findEpisodesForDate(tvId, date, detailPayload) {
                 console.error('[ent] episode cache write skipped', tvId, err.message);
             }
         }
-        return detailEpisodes.map(item => normalizeEpisode(item, tvId)).filter(Boolean);
+        return detailEpisodes.map(item => markCalendarEpisode(normalizeEpisode(item, tvId), date)).filter(Boolean);
     }
 
-    const seasonNumber = chooseSeasonNumberForDate(detailPayload, date);
+    const seasonNumber = chooseSeasonNumberForDate(detailPayload, date, airDateCandidates);
 
     if (!seasonNumber) {
         return [];
@@ -354,12 +457,12 @@ async function findEpisodesForDate(tvId, date, detailPayload) {
     const episodes = Array.isArray(seasonResult.payload.episodes) ? seasonResult.payload.episodes : [];
 
     return episodes
-        .filter(item => sameDate(item.air_date, date))
-        .map(item => normalizeEpisode(Object.assign({}, item, { season_number: item.season_number || seasonNumber }), tvId))
+        .filter(item => hasAirDate(item.air_date, airDateCandidates))
+        .map(item => markCalendarEpisode(normalizeEpisode(Object.assign({}, item, { season_number: item.season_number || seasonNumber }), tvId), date))
         .filter(Boolean);
 }
 
-async function enrichEpisodeCalendarList(list, date, episodeResolveLimit) {
+async function enrichEpisodeCalendarList(list, date, timezone, episodeResolveLimit) {
     const resolved = [];
 
     for (let i = 0; i < list.length; i++) {
@@ -369,11 +472,13 @@ async function enrichEpisodeCalendarList(list, date, episodeResolveLimit) {
         item.episode = null;
         item.hasEpisode = false;
         item.episodeText = '';
+        item.calendarDate = date;
+        item.timezone = timezone;
 
         if (i < episodeResolveLimit) {
             try {
                 const detailResult = await getTvDetailPayload(item.id);
-                const episodes = await findEpisodesForDate(item.id, date, detailResult.payload);
+                const episodes = await findEpisodesForDate(item.id, date, timezone, detailResult.payload);
 
                 item.episodes = episodes;
                 item.episode = episodes[0] || null;
@@ -577,7 +682,8 @@ router.get('/tv/episode-calendar', async ctx => {
         sort_by: 'popularity.desc'
     };
     const responseCacheKey = makeCacheKey('tv_episode_calendar', Object.assign({}, params, {
-        episodeResolveLimit
+        episodeResolveLimit,
+        version: EPISODE_CALENDAR_CACHE_VERSION
     }));
 
     try {
@@ -605,7 +711,7 @@ router.get('/tv/episode-calendar', async ctx => {
             const payload = cachedResult.payload;
 
             const normalized = normalizeList(payload, 'tv');
-            const list = await enrichEpisodeCalendarList(normalized.list, date, episodeResolveLimit);
+            const list = await enrichEpisodeCalendarList(normalized.list, date, params.timezone, episodeResolveLimit);
 
             return {
                 page: normalized.page,
@@ -613,7 +719,7 @@ router.get('/tv/episode-calendar', async ctx => {
                 totalResults: normalized.totalResults,
                 episodeResolveLimit,
                 episodeResolvedCount: list.filter(item => item.hasEpisode).length,
-                list
+                list: list.map(item => markCalendarItem(item, date, params.timezone))
             };
         }, TTL.EPISODE_CALENDAR);
 
