@@ -22,6 +22,8 @@ const TTL = {
 };
 const STALE_REFRESH_TIMEOUT = Number(process.env.TMDB_STALE_REFRESH_TIMEOUT || 1000);
 const EPISODE_CALENDAR_CACHE_VERSION = 'v4';
+const MOVIE_LIST_CACHE_VERSION = 'v1';
+const MOVIE_PAGE_LIMIT = Math.min(Math.max(Number(process.env.TMDB_MOVIE_PAGE_LIMIT || 5), 1), 10);
 const TV_CALENDAR_PAGE_LIMIT = Math.min(Math.max(Number(process.env.TMDB_TV_CALENDAR_PAGE_LIMIT || 5), 1), 10);
 const EXCLUDED_TV_GENRE_IDS = [10763, 10764, 10767];
 const refreshTasks = new Map();
@@ -299,6 +301,23 @@ function sortListByRating(data) {
     return data;
 }
 
+function sortMovieListByDate(data) {
+    if (!Array.isArray(data.list)) {
+        return data;
+    }
+
+    data.list = data.list.slice().sort((a, b) => {
+        const aTime = Date.parse(a.releaseDate || '') || Number.MAX_SAFE_INTEGER;
+        const bTime = Date.parse(b.releaseDate || '') || Number.MAX_SAFE_INTEGER;
+
+        if (aTime !== bTime) {
+            return aTime - bTime;
+        }
+        return Number(b.voteAverage || 0) - Number(a.voteAverage || 0);
+    });
+    return data;
+}
+
 function mergePagedPayloads(payloads) {
     const seen = new Set();
     const results = [];
@@ -342,28 +361,25 @@ async function listHandler(ctx, options) {
     }
 }
 
-async function getTvCalendarPayload(params, date, ttlSeconds) {
+async function getPagedTmdbPayload(options) {
     const payloads = [];
 
-    for (let page = 1; page <= TV_CALENDAR_PAGE_LIMIT; page++) {
-        const pageParams = Object.assign({}, params, { page });
+    for (let page = 1; page <= options.pageLimit; page++) {
+        const pageParams = Object.assign({}, options.params, { page });
         const cachedResult = await getCachedTmdbPayload(
-            makeCacheKey('tv_calendar', pageParams),
-            '/discover/tv',
+            makeCacheKey(options.cacheName, pageParams),
+            options.apiPath,
             pageParams,
-            ttlSeconds,
+            options.ttl,
             {
                 forceRefresh: true,
                 onRefreshPayload: async payload => {
                     const items = Array.isArray(payload.results) ? payload.results : [];
 
-                    await upsertMediaList(items, 'tv');
-                    await upsertCalendarList(items, {
-                        mediaType: 'tv',
-                        eventType: 'calendar',
-                        eventDate: date,
-                        timezone: params.timezone
-                    });
+                    await upsertMediaList(items, options.mediaType);
+                    if (options.calendar) {
+                        await upsertCalendarList(items, options.calendar);
+                    }
                 }
             }
         );
@@ -376,6 +392,52 @@ async function getTvCalendarPayload(params, date, ttlSeconds) {
     }
 
     return mergePagedPayloads(payloads);
+}
+
+async function getMovieListResponse(options) {
+    const responseCacheKey = makeCacheKey(options.cacheName + '_aggregate', Object.assign({}, options.params, {
+        pageLimit: MOVIE_PAGE_LIMIT,
+        version: MOVIE_LIST_CACHE_VERSION
+    }));
+
+    return getCachedResponsePayload(responseCacheKey, async () => {
+        const payload = await getPagedTmdbPayload({
+            apiPath: options.apiPath,
+            cacheName: options.cacheName,
+            params: options.params,
+            ttl: options.ttl,
+            mediaType: 'movie',
+            pageLimit: MOVIE_PAGE_LIMIT,
+            calendar: options.calendar
+        });
+        let normalized = normalizeList(payload, 'movie');
+
+        if (options.sortMode === 'date') {
+            normalized = sortMovieListByDate(normalized);
+        } else {
+            normalized = sortListByRating(normalized);
+        }
+
+        normalized.scannedPages = MOVIE_PAGE_LIMIT;
+        return normalized;
+    }, options.ttl);
+}
+
+async function getTvCalendarPayload(params, date, ttlSeconds) {
+    return getPagedTmdbPayload({
+        apiPath: '/discover/tv',
+        cacheName: 'tv_calendar',
+        params,
+        ttl: ttlSeconds,
+        mediaType: 'tv',
+        pageLimit: TV_CALENDAR_PAGE_LIMIT,
+        calendar: {
+            mediaType: 'tv',
+            eventType: 'calendar',
+            eventDate: date,
+            timezone: params.timezone
+        }
+    });
 }
 
 function sameDate(value, date) {
@@ -621,57 +683,71 @@ router.get('/image/:size/:file', async ctx => {
 
 router.get('/movies/now-playing', async ctx => {
     const params = {
-        page: getPage(ctx),
         region: getRegion(ctx)
     };
 
-    await listHandler(ctx, {
-        apiPath: '/movie/now_playing',
-        cacheKey: makeCacheKey('movie_now_playing', params),
-        params,
-        ttl: TTL.TODAY,
-        mediaType: 'movie',
-        calendar: {
-            mediaType: 'movie',
-            eventType: 'now_playing',
-            region: params.region
-        }
-    });
+    try {
+        const result = await getMovieListResponse({
+            apiPath: '/movie/now_playing',
+            cacheName: 'movie_now_playing',
+            params,
+            ttl: TTL.TODAY,
+            sortMode: 'rating',
+            calendar: {
+                mediaType: 'movie',
+                eventType: 'now_playing',
+                region: params.region
+            }
+        });
+
+        ok(ctx, result.payload, result.source);
+    } catch (err) {
+        fail(ctx, err);
+    }
 });
 
 router.get('/movies/upcoming', async ctx => {
     const params = {
-        page: getPage(ctx),
         region: getRegion(ctx)
     };
 
-    await listHandler(ctx, {
-        apiPath: '/movie/upcoming',
-        cacheKey: makeCacheKey('movie_upcoming', params),
-        params,
-        ttl: TTL.LIST,
-        mediaType: 'movie',
-        calendar: {
-            mediaType: 'movie',
-            eventType: 'upcoming',
-            region: params.region
-        }
-    });
+    try {
+        const result = await getMovieListResponse({
+            apiPath: '/movie/upcoming',
+            cacheName: 'movie_upcoming',
+            params,
+            ttl: TTL.LIST,
+            sortMode: 'date',
+            calendar: {
+                mediaType: 'movie',
+                eventType: 'upcoming',
+                region: params.region
+            }
+        });
+
+        ok(ctx, result.payload, result.source);
+    } catch (err) {
+        fail(ctx, err);
+    }
 });
 
 router.get('/movies/trending', async ctx => {
     const window = ctx.request.query.window === 'week' ? 'week' : 'day';
-    const params = {
-        page: getPage(ctx)
-    };
+    const params = {};
 
-    await listHandler(ctx, {
-        apiPath: '/trending/movie/' + window,
-        cacheKey: makeCacheKey('movie_trending_' + window, params),
-        params,
-        ttl: TTL.TRENDING,
-        mediaType: 'movie'
-    });
+    try {
+        const result = await getMovieListResponse({
+            apiPath: '/trending/movie/' + window,
+            cacheName: 'movie_trending_' + window,
+            params,
+            ttl: TTL.TRENDING,
+            sortMode: 'rating'
+        });
+
+        ok(ctx, result.payload, result.source);
+    } catch (err) {
+        fail(ctx, err);
+    }
 });
 
 router.get('/movie/:id', async ctx => {

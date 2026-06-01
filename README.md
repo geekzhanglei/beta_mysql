@@ -30,6 +30,8 @@ GET /blogapi/ent/image/w342/example.jpg
 
 `/tv/episode-calendar` 会聚合 TMDB 前 5 页剧集排期，过滤综艺、真人秀、脱口秀和新闻后按评分排序。默认解析前 40 部剧的分集信息，可通过 `TMDB_TV_CALENDAR_PAGE_LIMIT`、`TMDB_EPISODE_RESOLVE_LIMIT` 调整服务端默认值，接口参数 `episodeLimit` 最大允许到 60。
 
+电影列表会聚合 TMDB 前 5 页并缓存为一个响应。热映和趋势按评分排序，即将上映按上映日期排序；可通过 `TMDB_MOVIE_PAGE_LIMIT` 调整聚合页数。
+
 接口返回的图片地址默认使用 `https://blog.feroad.com/blogapi/ent/image/...` 代理 TMDB 图片，避免小程序体验版直接依赖 `image.tmdb.org`。如需换公开域名，可配置 `TMDB_PUBLIC_API_BASE_URL` 或 `TMDB_IMAGE_PROXY_BASE_URL`。
 
 图片代理会落盘缓存到 `public/tmdb-image-cache/`，默认容量上限 2GB，超过后按最久未访问/修改的文件优先清理。可通过 `TMDB_IMAGE_CACHE_DIR` 和 `TMDB_IMAGE_CACHE_MAX_BYTES` 调整。列表页默认返回 `w185` 小海报，详情页使用更清晰的 `w342` 海报和 `w780` 背景。
