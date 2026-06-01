@@ -132,6 +132,18 @@ function getAirDateCandidates(date, timezone) {
     return Array.from(new Set(candidates));
 }
 
+function getEpisodeCalendarTtl(date, timezone) {
+    const today = getTodayValue(timezone);
+
+    if (date === today) {
+        return 60 * 60;
+    }
+    if (date < today) {
+        return 24 * 60 * 60;
+    }
+    return 12 * 60 * 60;
+}
+
 function makeCacheKey(name, params) {
     const keys = Object.keys(params).sort();
     const query = keys.map(key => key + '=' + params[key]).join('&');
@@ -854,6 +866,7 @@ router.get('/tv/episode-calendar', async ctx => {
         pageLimit: TV_CALENDAR_PAGE_LIMIT,
         version: EPISODE_CALENDAR_CACHE_VERSION
     }));
+    const responseTtl = getEpisodeCalendarTtl(date, params.timezone);
 
     try {
         const responseResult = await getCachedResponsePayload(responseCacheKey, async () => {
@@ -870,7 +883,7 @@ router.get('/tv/episode-calendar', async ctx => {
                 episodeResolvedCount: list.filter(item => item.hasEpisode).length,
                 list: list.map(item => markCalendarItem(item, date, params.timezone))
             };
-        }, TTL.EPISODE_CALENDAR);
+        }, responseTtl);
 
         ok(ctx, responseResult.payload, responseResult.source);
     } catch (err) {

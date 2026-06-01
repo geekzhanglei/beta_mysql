@@ -141,7 +141,7 @@ async function main() {
         endpoints.push('/blogapi/ent/movies/upcoming?region=' + encodeURIComponent(region));
     });
 
-    for (let i = 0; i < WARM_DAYS; i++) {
+    for (let i = -1; i < WARM_DAYS - 1; i++) {
         const date = dateValue(i);
 
         endpoints.push('/blogapi/ent/tv/calendar?date=' + date + '&timezone=' + encodeURIComponent(TIMEZONE));
