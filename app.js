@@ -26,6 +26,7 @@ const adminoption = require('./routes/adminoption');
 const visit = require('./routes/visit');
 const adminvisit = require('./routes/adminvisit');
 const ent = require('./routes/ent');
+const market = require('./routes/market');
 
 // error handler
 onerror(app);
@@ -114,6 +115,7 @@ app.use(adminoption.routes(), adminoption.allowedMethods());
 app.use(visit.routes(), visit.allowedMethods());
 app.use(adminvisit.routes(), adminvisit.allowedMethods());
 app.use(ent.routes(), ent.allowedMethods());
+app.use(market.routes(), market.allowedMethods());
 
 // error-handling
 app.on('error', (err, ctx) => {

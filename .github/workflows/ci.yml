@@ -27,17 +27,19 @@ jobs:
     # 第一步：检出代码。把你的仓库代码下载到 GitHub 的虚拟机里
     - uses: actions/checkout@v4
 
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v4
+      with:
+        version: 10.26.1
+
     # 第二步：安装 Node.js 环境
     - name: Use Node.js ${{ matrix.node-version }}
       uses: actions/setup-node@v4
       with:
         node-version: ${{ matrix.node-version }}
-        # 自动缓存 yarn 依赖，下次运行会更快
-        cache: 'yarn'
+        cache: 'pnpm'
 
-    # 第三步：安装项目依赖
-    # --frozen-lockfile 确保安装的版本完全符合 yarn.lock，不自动更新
-    - run: yarn install --frozen-lockfile
+    - run: pnpm install --frozen-lockfile
 
     # 注意：这里的虚拟机环境不包含你服务器上的 /opt/config/.env。
     # 如果要在这里运行测试，需要通过 GitHub Secrets 手动注入环境变量。
@@ -74,7 +76,6 @@ jobs:
           export NVM_DIR="/root/.nvm"
           [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
           # 4. 使用 npm scripts 进行部署
-          yarn run install-prod
-          yarn run restart
-
-
+          corepack enable
+          pnpm run install-prod
+          pnpm run restart

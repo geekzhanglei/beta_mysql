@@ -8,10 +8,11 @@
         "prd": "pm2 start bin/www",
         "restart": "pm2 restart bin/www 2>/dev/null || pm2 start bin/www",
         "stop": "pm2 stop bin/www || pm2 delete bin/www",
-        "install-prod": "yarn install --production",
+        "install-prod": "pnpm install --prod --frozen-lockfile",
         "warm-tmdb-cache": "node scripts/warm-tmdb-cache.js",
         "test": "echo \"Error: no test specified\" && exit 1"
     },
+    "packageManager": "pnpm@10.26.1",
     "dependencies": {
         "debug": "^4.1.1",
         "dotenv": "^17.3.1",
