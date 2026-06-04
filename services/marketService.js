@@ -121,7 +121,8 @@ async function safeCall(fn, fallback) {
 async function buildMarketCard(market) {
     const quote = await safeCall(() => sources.fetchQuote(market, setOriginStatus), {});
     const klines = await safeCall(() => sources.fetchKlines(market, 1, setOriginStatus), []);
-    const close = quote.close;
+    const latest = klines[klines.length - 1] || {};
+    const close = quote.close == null ? latest.close : quote.close;
     const closePercentile = calcPercentile(klines, close, 'close');
     const first = klines[0] || {};
 
