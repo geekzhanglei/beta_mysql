@@ -82,12 +82,21 @@ app.use(
     })
 );
 
+function shouldWriteAppCors(ctx) {
+    if (process.env.DISABLE_APP_CORS === '1') {
+        return false;
+    }
+    return String(ctx.host || '').split(':')[0] !== 'api.feroad.com';
+}
+
 // CORS middleware
 app.use(async (ctx, next) => {
-    ctx.set('Access-Control-Allow-Origin', ctx.headers.origin || '*');
-    ctx.set('Access-Control-Allow-Headers', 'Content-Type, Content-Length, Authorization, Accept, X-Requested-With');
-    ctx.set('Access-Control-Allow-Methods', 'PUT, POST, GET, DELETE, OPTIONS');
-    ctx.set('Access-Control-Allow-Credentials', 'true');
+    if (shouldWriteAppCors(ctx)) {
+        ctx.set('Access-Control-Allow-Origin', ctx.headers.origin || '*');
+        ctx.set('Access-Control-Allow-Headers', 'Content-Type, Content-Length, Authorization, Accept, X-Requested-With');
+        ctx.set('Access-Control-Allow-Methods', 'PUT, POST, GET, DELETE, OPTIONS');
+        ctx.set('Access-Control-Allow-Credentials', 'true');
+    }
     if (ctx.method === 'OPTIONS') {
         ctx.status = 204;
     } else {
