@@ -183,7 +183,7 @@ async function buildOverview() {
 async function buildHistory(id, years) {
     const market = INDEX_MARKETS.find(item => item.id === id) || INDEX_MARKETS[0];
     const quote = await safeCall(() => sources.fetchQuote(market, setOriginStatus), {});
-    const klines = await safeCall(() => sources.fetchKlines(market, years, setOriginStatus), []);
+    const klines = await sources.fetchKlines(market, years, setOriginStatus);
     const monthly = downsampleMonthly(klines);
     const currentClose = quote.close || (klines[klines.length - 1] || {}).close;
     const sortedCloses = klines.map(item => item.close).filter(item => item != null).sort((a, b) => a - b);
@@ -209,7 +209,6 @@ async function buildHistory(id, years) {
             marketCapSource: 'eastmoney.quote-api-current-marketcap-scaled-by-kline',
             peSource: quote.peTtm ? 'eastmoney.quote-api-current' : 'eastmoney.kline-api-derived'
         },
-        warning: points.length ? '' : '公开历史行情接口暂时不可用，已返回空序列并记录来源状态。',
         points
     });
 }

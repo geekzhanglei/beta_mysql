@@ -1,16 +1,16 @@
-const MARKET_CACHE_VERSION = 'v2';
+const MARKET_CACHE_VERSION = 'v3';
 
 const REFRESH_POLICY = 'daily-after-01:00-asia-shanghai';
 
 const INDEX_MARKETS = [
-    { id: 'csi300', code: '000300.SH', name: '沪深300', region: 'A股', style: '大盘价值', currency: 'CNY', secid: '1.000300', csindex: '000300' },
-    { id: 'csi800', code: '000906.SH', name: '中证800', region: 'A股', style: '中大盘均衡', currency: 'CNY', secid: '1.000906', csindex: '000906' },
-    { id: 'csi1000', code: '000852.SH', name: '中证1000', region: 'A股', style: '小盘成长', currency: 'CNY', secid: '1.000852', csindex: '000852' },
-    { id: 'star50', code: '000688.SH', name: '科创50', region: 'A股', style: '硬科技', currency: 'CNY', secid: '1.000688', csindex: '000688' },
-    { id: 'nasdaq', code: 'IXIC.US', name: '纳斯达克', region: '美股', style: '科技成长', currency: 'USD', secid: '100.IXIC' },
-    { id: 'sp500', code: 'SPX.US', name: '标普500', region: '美股', style: '大盘核心', currency: 'USD', secid: '100.SPX' },
-    { id: 'hsi', code: 'HSI.HK', name: '恒生指数', region: '港股', style: '低估值', currency: 'HKD', secid: '100.HSI' },
-    { id: 'hstech', code: 'HSTECH.HK', name: '恒生科技', region: '港股', style: '港股科技', currency: 'HKD', secid: '100.HSTECH' }
+    { id: 'csi300', code: '000300.SH', name: '沪深300', region: 'A股', style: '大盘价值', currency: 'CNY', secid: '1.000300', csindex: '000300', tencentCode: 'sh000300' },
+    { id: 'csi800', code: '000906.SH', name: '中证800', region: 'A股', style: '中大盘均衡', currency: 'CNY', secid: '1.000906', csindex: '000906', tencentCode: 'sh000906' },
+    { id: 'csi1000', code: '000852.SH', name: '中证1000', region: 'A股', style: '小盘成长', currency: 'CNY', secid: '1.000852', csindex: '000852', tencentCode: 'sh000852' },
+    { id: 'star50', code: '000688.SH', name: '科创50', region: 'A股', style: '硬科技', currency: 'CNY', secid: '1.000688', csindex: '000688', tencentCode: 'sh000688' },
+    { id: 'nasdaq', code: 'IXIC.US', name: '纳斯达克', region: '美股', style: '科技成长', currency: 'USD', secid: '100.IXIC', tencentCode: 'us.IXIC' },
+    { id: 'sp500', code: 'SPX.US', name: '标普500', region: '美股', style: '大盘核心', currency: 'USD', secid: '100.SPX', tencentCode: 'us.INX' },
+    { id: 'hsi', code: 'HSI.HK', name: '恒生指数', region: '港股', style: '低估值', currency: 'HKD', secid: '100.HSI', tencentCode: 'hkHSI' },
+    { id: 'hstech', code: 'HSTECH.HK', name: '恒生科技', region: '港股', style: '港股科技', currency: 'HKD', secid: '100.HSTECH', tencentCode: 'hkHSTECH' }
 ];
 
 const GLOBAL_MARKET_CAP_COUNTRIES = [

@@ -123,6 +123,25 @@ function eastmoneyKlineUrl(secid, years) {
         '&beg=' + beg + '&end=' + endText;
 }
 
+function tencentKlineUrl(code, years) {
+    const end = new Date();
+    const begin = new Date(end);
+    begin.setFullYear(begin.getFullYear() - years);
+    const beg = [
+        begin.getFullYear(),
+        String(begin.getMonth() + 1).padStart(2, '0'),
+        String(begin.getDate()).padStart(2, '0')
+    ].join('-');
+    const endText = [
+        end.getFullYear(),
+        String(end.getMonth() + 1).padStart(2, '0'),
+        String(end.getDate()).padStart(2, '0')
+    ].join('-');
+
+    return 'https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=' +
+        encodeURIComponent(code + ',month,' + beg + ',' + endText + ',640,qfq');
+}
+
 function eastmoneyClistUrl(fs, fields, page, size) {
     return 'https://push2.eastmoney.com/api/qt/clist/get?pn=' + page +
         '&pz=' + size +
@@ -154,6 +173,34 @@ async function fetchQuote(market, statusReporter) {
 }
 
 async function fetchKlines(market, years, statusReporter) {
+    const errors = [];
+
+    try {
+        const rows = await fetchEastmoneyKlines(market, years, statusReporter);
+        if (rows.length) {
+            return rows;
+        }
+        errors.push(new Error('eastmoney kline empty'));
+    } catch (err) {
+        errors.push(err);
+    }
+
+    try {
+        const rows = await fetchTencentMonthlyKlines(market, years, statusReporter);
+        if (rows.length) {
+            return rows;
+        }
+        errors.push(new Error('tencent kline empty'));
+    } catch (err) {
+        errors.push(err);
+    }
+
+    const err = new Error('market history origin failed: ' + errors.map(item => item.message).join('; '));
+    err.causes = errors;
+    throw err;
+}
+
+async function fetchEastmoneyKlines(market, years, statusReporter) {
     const data = await requestJson('eastmoney.kline.' + market.id, eastmoneyKlineUrl(market.secid, years), {
         Referer: 'https://quote.eastmoney.com/'
     }, statusReporter);
@@ -174,6 +221,32 @@ async function fetchKlines(market, years, statusReporter) {
             turnoverRate: normalizeNumber(parts[10])
         };
     }).filter(item => item.date && item.close != null);
+}
+
+async function fetchTencentMonthlyKlines(market, years, statusReporter) {
+    if (!market.tencentCode) {
+        return [];
+    }
+
+    const data = await requestJson('tencent.kline.' + market.id, tencentKlineUrl(market.tencentCode, years), {
+        Referer: 'https://gu.qq.com/'
+    }, statusReporter);
+    const item = data && data.data && data.data[market.tencentCode] ? data.data[market.tencentCode] : {};
+    const rows = Array.isArray(item.month) ? item.month : [];
+
+    return rows.map(row => ({
+        date: row[0],
+        open: normalizeNumber(row[1]),
+        close: normalizeNumber(row[2]),
+        high: normalizeNumber(row[3]),
+        low: normalizeNumber(row[4]),
+        volume: normalizeNumber(row[5]),
+        amount: null,
+        amplitude: null,
+        changePct: null,
+        change: null,
+        turnoverRate: null
+    })).filter(item => item.date && item.close != null);
 }
 
 async function fetchEastmoneyList(originKey, fs, fields, statusReporter, size) {
