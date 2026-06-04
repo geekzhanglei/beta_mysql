@@ -28,7 +28,8 @@ router.get('/overview', async ctx => {
 
 router.get('/fund-flow', async ctx => {
     try {
-        ok(ctx, await marketService.getFundFlow());
+        const data = await marketService.getFundFlow();
+        ok(ctx, data.fundFlow || data);
     } catch (err) {
         fail(ctx, err);
     }
@@ -36,7 +37,8 @@ router.get('/fund-flow', async ctx => {
 
 router.get('/crowding', async ctx => {
     try {
-        ok(ctx, await marketService.getCrowding());
+        const data = await marketService.getCrowding();
+        ok(ctx, data.crowding || data);
     } catch (err) {
         fail(ctx, err);
     }
@@ -44,7 +46,37 @@ router.get('/crowding', async ctx => {
 
 router.get('/consensus', async ctx => {
     try {
-        ok(ctx, await marketService.getConsensus());
+        const data = await marketService.getStyle();
+        ok(ctx, {
+            source: data.source,
+            updatedAt: data.updatedAt,
+            mainline: data.mainline,
+            styles: data.styles
+        });
+    } catch (err) {
+        fail(ctx, err);
+    }
+});
+
+router.get('/style', async ctx => {
+    try {
+        ok(ctx, await marketService.getStyle());
+    } catch (err) {
+        fail(ctx, err);
+    }
+});
+
+router.get('/value', async ctx => {
+    try {
+        ok(ctx, await marketService.getValue());
+    } catch (err) {
+        fail(ctx, err);
+    }
+});
+
+router.get('/status', async ctx => {
+    try {
+        ok(ctx, await marketService.getOriginStatus());
     } catch (err) {
         fail(ctx, err);
     }
