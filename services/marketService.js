@@ -446,20 +446,55 @@ function withMeta(payload) {
     }, payload);
 }
 
+function isDatasetComplete(cacheKey, payload) {
+    if (!payload || typeof payload !== 'object') {
+        return false;
+    }
+
+    if (cacheKey === 'overview') {
+        const markets = Array.isArray(payload.markets) ? payload.markets : [];
+        return markets.length >= INDEX_MARKETS.length && markets.some(item => item.close != null);
+    }
+
+    if (cacheKey === 'style') {
+        const styles = Array.isArray(payload.styles) ? payload.styles : [];
+        const industries = Array.isArray(payload.fundFlow && payload.fundFlow.industryMatrix)
+            ? payload.fundFlow.industryMatrix
+            : [];
+        return styles.length >= STYLE_CATALOG.length && industries.length > 0;
+    }
+
+    if (cacheKey === 'value') {
+        const stocks = Array.isArray(payload.stocks) ? payload.stocks : [];
+        return stocks.length >= Math.min(10, VALUE_STOCKS.length);
+    }
+
+    if (cacheKey.indexOf('history:') === 0) {
+        const points = Array.isArray(payload.points) ? payload.points : [];
+        return points.length > 0;
+    }
+
+    return true;
+}
+
 async function withDailyCache(cacheKey, builder) {
     const key = 'market:' + MARKET_CACHE_VERSION + ':' + cacheKey;
     const cached = await getDatasetCache(key);
+    const cachedComplete = cached && isDatasetComplete(cacheKey, cached.payload);
 
-    if (cached && cached.isFresh) {
+    if (cached && cached.isFresh && cachedComplete) {
         return Object.assign({}, cached.payload, { source: 'cache' });
     }
 
     try {
         const payload = await builder();
+        if (!isDatasetComplete(cacheKey, payload)) {
+            throw new Error('market dataset incomplete after origin refresh: ' + cacheKey);
+        }
         await setDatasetCache(key, payload, nextRefreshDate());
         return payload;
     } catch (err) {
-        if (cached && cached.payload) {
+        if (cachedComplete) {
             return Object.assign({}, cached.payload, {
                 source: 'stale-cache',
                 stale: true,
