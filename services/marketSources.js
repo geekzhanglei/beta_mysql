@@ -151,7 +151,7 @@ function eastmoneyClistUrl(fs, fields, page, size) {
 
 function worldBankUrl(countries, indicator) {
     return 'https://api.worldbank.org/v2/country/' + countries.join(';') +
-        '/indicator/' + indicator + '?format=json&per_page=300';
+        '/indicator/' + indicator + '?format=json&per_page=20000';
 }
 
 async function fetchQuote(market, statusReporter) {

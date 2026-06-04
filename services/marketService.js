@@ -453,7 +453,10 @@ function isDatasetComplete(cacheKey, payload) {
 
     if (cacheKey === 'overview') {
         const markets = Array.isArray(payload.markets) ? payload.markets : [];
-        return markets.length >= INDEX_MARKETS.length && markets.some(item => item.close != null);
+        const caps = Array.isArray(payload.globalMarketCaps) ? payload.globalMarketCaps : [];
+        const hasUsCap = caps.some(item => item.name === '美国' && item.cap != null);
+        const hasChinaCap = caps.some(item => item.name === '中国A股' && item.cap != null);
+        return markets.length >= INDEX_MARKETS.length && markets.some(item => item.close != null) && hasUsCap && hasChinaCap;
     }
 
     if (cacheKey === 'style') {

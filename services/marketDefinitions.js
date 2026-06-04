@@ -1,4 +1,4 @@
-const MARKET_CACHE_VERSION = 'v3';
+const MARKET_CACHE_VERSION = 'v4';
 
 const REFRESH_POLICY = 'daily-after-01:00-asia-shanghai';
 
