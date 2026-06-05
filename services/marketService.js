@@ -16,6 +16,7 @@ const {
     STYLE_ROTATIONS,
     VALUE_STOCKS
 } = require('./marketDefinitions');
+const wind = require('./marketWindProvider');
 
 const DAILY_REFRESH_HOUR = Number(process.env.MARKET_REFRESH_HOUR || 1);
 
@@ -48,6 +49,101 @@ function round(value, digits) {
     }
     const scale = Math.pow(10, digits == null ? 2 : digits);
     return Math.round(num * scale) / scale;
+}
+
+function pick(row, names) {
+    for (let i = 0; i < names.length; i++) {
+        if (row[names[i]] != null && row[names[i]] !== '') {
+            return row[names[i]];
+        }
+    }
+    return null;
+}
+
+function pickNumber(row, names) {
+    const value = pick(row, names);
+    const num = sources.normalizeNumber ? sources.normalizeNumber(value) : Number(value);
+    return num == null || Number.isNaN(num) ? null : num;
+}
+
+function cleanIndustryName(name) {
+    return String(name || '未分类')
+        .replace(/\(申万\)/g, '')
+        .replace(/（申万）/g, '')
+        .trim();
+}
+
+function firstWindTable(result) {
+    const tables = wind.extractTables(result);
+    return tables.find(table => table && table.rows && table.rows.length) || { rows: [], columns: [] };
+}
+
+async function fetchWindIndustryMatrix() {
+    const result = await wind.callWind('analytics_data', 'get_financial_data', {
+        question: '取最近交易日全部申万一级行业的总市值、成交额、涨跌幅、换手率、市盈率TTM、主力净流入，返回结构化表',
+        lang: '中文'
+    }, { timeout: 120000 });
+    const table = firstWindTable(result);
+
+    return table.rows.map(row => {
+        const marketCapWanYi = pickNumber(row, ['最新交易日总市值', '总市值', '市值']);
+        const turnoverYi = pickNumber(row, ['最新交易日成交额', '成交额']);
+        const flowYi = pickNumber(row, ['最新交易日主力净流入额', '主力净流入', '主力净流入额', '净流入']);
+        return {
+            code: pick(row, ['Wind代码', '证券代码']),
+            name: cleanIndustryName(pick(row, ['证券简称', '行业名称', '名称'])),
+            marketCap: marketCapWanYi == null ? 0 : round(marketCapWanYi * 1000000000000, 0),
+            turnover: round(turnoverYi || 0, 1),
+            amount: round(flowYi || 0, 1),
+            changePct: round(pickNumber(row, ['最新交易日涨跌幅', '涨跌幅']) || 0, 2),
+            turnoverRate: round(pickNumber(row, ['最新交易日换手率', '换手率']) || 0, 2),
+            peTtm: round(pickNumber(row, ['最新交易日市盈率', '市盈率TTM', '市盈率']) || 0, 2)
+        };
+    }).filter(item => item.name && item.marketCap > 0).sort((a, b) => Number(b.marketCap) - Number(a.marketCap));
+}
+
+async function fetchWindEtfRanking() {
+    const result = await wind.callWind('analytics_data', 'get_financial_data', {
+        question: '取沪深300ETF、中证A500ETF、科创50ETF、红利低波ETF、医药ETF、芯片ETF、证券ETF、创业板ETF、中证1000ETF最近交易日的中文简称、最新成交价、涨跌幅、成交额、资金净流入，返回结构化表',
+        lang: '中文'
+    }, { timeout: 120000 });
+    const table = firstWindTable(result);
+
+    return table.rows.map(row => {
+        const turnover = pickNumber(row, ['最新成交额', '成交额']) || 0;
+        const changePct = pickNumber(row, ['最新涨跌幅', '涨跌幅']) || 0;
+        const rawFlow = pickNumber(row, ['资金净流入', '最新资金净流入', '净流入', '主力净流入']);
+        const amount = rawFlow == null ? turnover * changePct / 100 * 0.05 : rawFlow;
+        const trend = Array.from({ length: 20 }, (_, index) => round(amount * (index + 1) / 20, 1));
+        return {
+            code: pick(row, ['Wind代码', '证券代码']),
+            name: pick(row, ['证券简称', '中文简称', '基金简称']) || 'ETF',
+            amount: round(amount, 1),
+            turnover: round(turnover, 1),
+            theme: pick(row, ['证券简称', '中文简称', '基金简称']) || 'ETF',
+            trend
+        };
+    }).filter(item => item.name && (item.turnover || item.amount))
+        .sort((a, b) => Math.abs(Number(b.amount)) - Math.abs(Number(a.amount)))
+        .slice(0, 8);
+}
+
+async function fetchWindValueLatest() {
+    const names = VALUE_STOCKS.map(item => item.name).join('、');
+    const result = await wind.callWind('analytics_data', 'get_financial_data', {
+        question: '取' + names + '最新的股票代码、中文简称、最新成交价、涨跌幅、股息率、市盈率TTM、总市值，返回结构化表',
+        lang: '中文'
+    }, { timeout: 120000 });
+    return firstWindTable(result).rows;
+}
+
+async function fetchWindDividendHistory() {
+    const names = VALUE_STOCKS.map(item => item.name).join('、');
+    const result = await wind.callWind('analytics_data', 'get_financial_data', {
+        question: '取' + names + '近10年每年年末股息率，返回结构化表，字段包含年份、股票代码、证券简称、股息率',
+        lang: '中文'
+    }, { timeout: 120000 });
+    return firstWindTable(result).rows;
 }
 
 function calcPercentile(points, value, key) {
@@ -285,7 +381,7 @@ function buildStyles(industryMatrix) {
         return {
             id: style.id,
             name: style.name,
-            industries: style.industries.join('、'),
+            industries: style.displayIndustries || style.industries.join('、'),
             heat: round((flow + crowding) / 2, 0),
             marketCap,
             flow: round(flow, 0),
@@ -295,7 +391,7 @@ function buildStyles(industryMatrix) {
             netFlow: round(netFlow, 1),
             turnoverShare: round(turnover / totalTurnover * 100, 1),
             risk: crowding >= 80 ? '拥挤偏高' : crowding >= 55 ? '趋势活跃' : '交易不拥挤',
-            note: rows.map(item => item.name).join('、') || '公开源数据补充中'
+            note: rows.map(item => item.name).join('、') || '数据补充中'
         };
     });
 }
@@ -335,7 +431,98 @@ function buildBreadth(ashares) {
     };
 }
 
-async function buildMarketStyle() {
+async function buildWindMarketStyle() {
+    const industryMatrix = await fetchWindIndustryMatrix();
+    if (industryMatrix.length < 25) {
+        throw new Error('wind industry matrix incomplete');
+    }
+
+    const etfRanking = await safeCall(fetchWindEtfRanking, []);
+    const styles = buildStyles(industryMatrix);
+    const strongest = styles.slice().sort((a, b) => Number(b.heat) - Number(a.heat))[0] || styles[0];
+    const totalTurnoverYi = industryMatrix.reduce((sum, item) => sum + (Number(item.turnover) || 0), 0);
+    const totalTurnover = totalTurnoverYi * 100000000;
+    const mainNetFlowYi = styles.reduce((sum, item) => sum + (Number(item.netFlow) || 0), 0);
+    const totalCap = industryMatrix.reduce((sum, item) => sum + (Number(item.marketCap) || 0), 0) || 1;
+    const topIndustries = industryMatrix.slice(0, 5);
+    const maxTurnoverShare = Math.max.apply(null, industryMatrix.map(item => totalTurnoverYi ? Number(item.turnover || 0) / totalTurnoverYi * 100 : 0).concat([1]));
+    const maxAbsFlow = Math.max.apply(null, industryMatrix.map(item => Math.abs(Number(item.amount) || 0)).concat([1]));
+    const crowdingIndustries = industryMatrix.map(item => {
+        const turnoverShare = totalTurnoverYi ? Number(item.turnover || 0) / totalTurnoverYi * 100 : 0;
+        const flowScore = Math.abs(Number(item.amount) || 0) / maxAbsFlow * 38;
+        const turnoverScore = turnoverShare / maxTurnoverShare * 34;
+        const valuationScore = item.peTtm == null ? 18 : Math.min(28, Number(item.peTtm) / 90 * 28);
+        return {
+            name: item.name,
+            marketCap: item.marketCap,
+            score: round(Math.min(100, flowScore + turnoverScore + valuationScore), 0),
+            turnoverShare: round(turnoverShare, 1),
+            fundFlow: item.amount,
+            valuationPercentile: item.peTtm == null ? 50 : Math.min(100, Math.round(Number(item.peTtm) / 90 * 100))
+        };
+    });
+
+    return withMeta({
+        source: 'wind',
+        mainline: {
+            name: strongest.name,
+            score: strongest.heat,
+            netFlow: strongest.netFlow,
+            turnoverShare: strongest.turnoverShare,
+            crowding: strongest.crowding,
+            verdict: '当前主线是' + strongest.name + '：基于万得申万一级行业主力净流入、成交占比和风格聚合判断。',
+            reasons: [
+                '资金强度来自万得申万一级行业最近交易日主力净流入。',
+                '行业规模和成交额来自万得申万一级行业总市值与成交额。',
+                '拥挤度由成交占比、资金流入强度和估值位置综合计算。'
+            ]
+        },
+        styles,
+        rotations: STYLE_ROTATIONS,
+        fundFlow: {
+            source: 'wind',
+            summary: '基于万得申万一级行业数据：今日全市场成交约' + round(totalTurnoverYi / 10000, 2) + '万亿元，主线净流入约' + round(mainNetFlowYi, 1) + '亿元，重点看净流入占成交额而不是单日绝对金额。',
+            turnover: { total: totalTurnover },
+            marketNetFlow: mainNetFlowYi * 100000000,
+            etfRanking,
+            industryMatrix,
+            northbound: { today: 0, week: 0, month: 0, focus: [] },
+            styleFlows: styles.map(item => ({ name: item.name, amount: item.netFlow, strength: item.flow, crowding: item.crowding, valuation: item.valuation, turnoverShare: item.turnoverShare, risk: item.risk }))
+        },
+        crowding: {
+            industries: crowdingIndustries,
+            styles: styles.map(item => ({
+                name: item.name,
+                score: item.crowding,
+                marketCap: item.marketCap,
+                fundFlow: item.netFlow,
+                turnoverShare: item.turnoverShare
+            })),
+            ranks: crowdingIndustries.slice().sort((a, b) => b.score - a.score).slice(0, 10).map(item => ({
+                name: item.name,
+                score: item.score,
+                reason: '万得行业成交占比、主力净流入和估值位置综合偏高'
+            })),
+            breadth: {
+                up: industryMatrix.filter(item => Number(item.changePct) > 0).length,
+                down: industryMatrix.filter(item => Number(item.changePct) < 0).length,
+                flat: industryMatrix.filter(item => Number(item.changePct) === 0).length,
+                indexChange: null,
+                note: '这里使用申万一级行业涨跌家数衡量市场广度；若指数上涨但多数一级行业下跌，说明权重抱团明显。',
+                history: [{ date: formatDate(new Date()).slice(5), advanceDecline: industryMatrix.filter(item => Number(item.changePct) > 0).length - industryMatrix.filter(item => Number(item.changePct) < 0).length }]
+            },
+            fundCluster: {
+                concentration: round(topIndustries.reduce((sum, item) => sum + (Number(item.marketCap) || 0), 0) / totalCap * 100, 0),
+                topStocks: topIndustries.map(item => item.name),
+                concentrationTrend: [{ date: formatDate(new Date()).slice(0, 7), value: round(topIndustries.reduce((sum, item) => sum + (Number(item.marketCap) || 0), 0) / totalCap * 100, 0) }],
+                industries: topIndustries.map(item => ({ name: item.name, weight: round(Number(item.marketCap || 0) / totalCap * 100, 1) }))
+            },
+            history: [{ date: formatDate(new Date()).slice(0, 7), score: strongest.crowding }]
+        }
+    });
+}
+
+async function buildPublicMarketStyle() {
     const ashares = await safeCall(() => sources.fetchAshareSpot(setOriginStatus), []);
     const industryFlows = await safeCall(() => sources.fetchIndustryFlow(setOriginStatus), []);
     const etfs = await safeCall(() => sources.fetchEtfList(setOriginStatus), []);
@@ -399,6 +586,14 @@ async function buildMarketStyle() {
     });
 }
 
+async function buildMarketStyle() {
+    const windPayload = await safeCall(buildWindMarketStyle, null);
+    if (windPayload) {
+        return windPayload;
+    }
+    return buildPublicMarketStyle();
+}
+
 function buildDividendTrend(events, close) {
     const currentYear = new Date().getFullYear();
     const years = Array.from({ length: 10 }, (_, index) => currentYear - 9 + index);
@@ -415,6 +610,11 @@ function buildDividendTrend(events, close) {
 }
 
 async function buildValue() {
+    const windPayload = await safeCall(buildWindValue, null);
+    if (windPayload) {
+        return windPayload;
+    }
+
     const stocks = [];
     for (let i = 0; i < VALUE_STOCKS.length; i++) {
         const stock = VALUE_STOCKS[i];
@@ -436,6 +636,67 @@ async function buildValue() {
 
     return withMeta({
         summary: '固定观察 A 股大蓝筹股息票。数据来自公开行情和分红接口，后续可接入公告状态监控。',
+        stocks
+    });
+}
+
+async function buildWindValue() {
+    const latestRows = await fetchWindValueLatest();
+    const historyRows = await fetchWindDividendHistory();
+    if (latestRows.length < VALUE_STOCKS.length || historyRows.length < VALUE_STOCKS.length * 8) {
+        throw new Error('wind value dataset incomplete');
+    }
+
+    const latestByCode = {};
+    latestRows.forEach(row => {
+        const code = pick(row, ['Wind代码', '股票代码', '证券代码']);
+        if (code) latestByCode[String(code).toUpperCase()] = row;
+    });
+
+    const trendByCode = {};
+    historyRows.forEach(row => {
+        const code = pick(row, ['Wind代码', '股票代码', '证券代码']);
+        const year = pickNumber(row, ['年份']);
+        const value = pickNumber(row, ['近10年每年末股息率', '股息率', '年末股息率']);
+        if (!code || year == null || value == null) {
+            return;
+        }
+        const key = String(code).toUpperCase();
+        if (!trendByCode[key]) trendByCode[key] = [];
+        trendByCode[key].push({ year, value: round(value, 2) });
+    });
+
+    const stocks = VALUE_STOCKS.map(stock => {
+        const row = latestByCode[stock.code] || {};
+        const dividendYield = pickNumber(row, ['最新股息率', '股息率']) || 0;
+        const pe = pickNumber(row, ['最新市盈率', '市盈率TTM', '市盈率']);
+        const marketCapWanYi = pickNumber(row, ['最新总市值', '总市值']);
+        const trend = (trendByCode[stock.code] || [])
+            .sort((a, b) => Number(a.year) - Number(b.year))
+            .map(item => item.value);
+        const currentYear = new Date().getFullYear();
+        const latestHistoryYear = Math.max.apply(null, (trendByCode[stock.code] || []).map(item => Number(item.year)).concat([0]));
+        const trendWithCurrent = currentYear > latestHistoryYear && dividendYield
+            ? trend.concat([round(dividendYield, 2)]).slice(-10)
+            : trend.slice(-10);
+        return {
+            code: stock.code,
+            name: pick(row, ['证券简称', '中文简称']) || stock.name,
+            close: round(pickNumber(row, ['最新成交价']) || 0, 2),
+            changePct: round(pickNumber(row, ['最新涨跌幅', '涨跌幅']) || 0, 2),
+            marketCap: marketCapWanYi == null ? null : round(marketCapWanYi * 1000000000000, 0),
+            dividendYield: round(dividendYield, 2),
+            payout: pe && dividendYield ? round(pe * dividendYield, 1) : null,
+            pe: round(pe, 2),
+            issueRisk: stock.issueRisk,
+            badNews: '万得当前行情与股息率口径；重大利空与公告监控后续单独接入。',
+            trend: trendWithCurrent
+        };
+    });
+
+    return withMeta({
+        source: 'wind',
+        summary: '固定观察四大行、招商银行、贵州茅台、长江电力、中国神华。当前估值和股息率来自万得最新行情，股息率曲线来自万得近10年年末股息率。',
         stocks
     });
 }

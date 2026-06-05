@@ -157,8 +157,40 @@ function tableFromWindData(data) {
     };
 }
 
+function extractTables(normalized) {
+    const roots = [];
+    if (normalized && normalized.data) roots.push(normalized.data);
+    if (normalized && normalized.payload) roots.push(normalized.payload);
+    if (normalized && normalized.result) roots.push(normalized.result);
+
+    const tables = [];
+    const visit = value => {
+        if (!value || typeof value !== 'object') {
+            return;
+        }
+        if (Array.isArray(value.columns) && Array.isArray(value.rows)) {
+            tables.push(tableFromWindData(value));
+            return;
+        }
+        if (Array.isArray(value)) {
+            value.forEach(visit);
+            return;
+        }
+        Object.keys(value).forEach(key => {
+            if (key === 'columns' || key === 'rows') {
+                return;
+            }
+            visit(value[key]);
+        });
+    };
+
+    roots.forEach(visit);
+    return tables;
+}
+
 module.exports = {
     callWind,
     tableFromWindData,
+    extractTables,
     WindProviderError
 };

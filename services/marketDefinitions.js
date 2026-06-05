@@ -1,4 +1,4 @@
-const MARKET_CACHE_VERSION = 'v5';
+const MARKET_CACHE_VERSION = 'v6';
 
 const REFRESH_POLICY = 'daily-after-01:00-asia-shanghai';
 
@@ -51,16 +51,16 @@ const STATIC_GLOBAL_MARKET_CAPS = [
 }, item));
 
 const STYLE_CATALOG = [
-    { id: 'financial-dividend', name: '金融红利', industries: ['银行', '非银金融', '公用事业', '交通运输', '煤炭'] },
-    { id: 'consumer-bluechip', name: '消费白马', industries: ['食品饮料', '家用电器', '商贸零售', '社会服务', '美容护理'] },
-    { id: 'tech-growth', name: '科技成长', industries: ['计算机', '通信', '传媒', '电子'] },
-    { id: 'semiconductor-hardtech', name: '半导体硬科技', industries: ['电子', '国防军工'] },
-    { id: 'new-energy', name: '新能源', industries: ['电力设备', '汽车'] },
-    { id: 'healthcare', name: '医药医疗', industries: ['医药生物'] },
-    { id: 'property-chain', name: '地产链', industries: ['房地产', '建筑材料', '建筑装饰', '轻工制造'] },
-    { id: 'cyclical-resources', name: '周期资源', industries: ['煤炭', '石油石化', '有色金属', '钢铁', '基础化工'] },
-    { id: 'export-manufacturing', name: '出海制造', industries: ['汽车', '家用电器', '机械设备', '电力设备'] },
-    { id: 'smallcap-growth', name: '中小盘成长', industries: ['计算机', '传媒', '机械设备', '环保'] }
+    { id: 'financial-dividend', name: '金融红利', displayIndustries: '银行、保险、券商、运营商、高股息央企', industries: ['银行', '非银金融', '通信', '公用事业', '交通运输', '煤炭'] },
+    { id: 'consumer-bluechip', name: '消费白马', displayIndustries: '白酒、食品饮料、家电、消费服务', industries: ['食品饮料', '家用电器', '商贸零售', '社会服务', '美容护理'] },
+    { id: 'tech-growth', name: '科技成长', displayIndustries: 'AI、软件、互联网、计算机、通信', industries: ['计算机', '通信', '传媒'] },
+    { id: 'semiconductor-hardtech', name: '半导体硬科技', displayIndustries: '芯片、设备、材料、科创50', industries: ['电子', '国防军工', '机械设备'] },
+    { id: 'new-energy', name: '新能源', displayIndustries: '光伏、锂电、储能、新能源车', industries: ['电力设备', '汽车'] },
+    { id: 'healthcare', name: '医药医疗', displayIndustries: '创新药、医疗器械、CXO、医疗服务', industries: ['医药生物'] },
+    { id: 'property-chain', name: '地产链', displayIndustries: '房地产、建材、建筑、家居、物业', industries: ['房地产', '建筑材料', '建筑装饰', '轻工制造'] },
+    { id: 'cyclical-resources', name: '周期资源', displayIndustries: '煤炭、石油、有色、钢铁、化工', industries: ['煤炭', '石油石化', '有色金属', '钢铁', '基础化工'] },
+    { id: 'export-manufacturing', name: '出海制造', displayIndustries: '汽车、家电、机械、电网设备、船舶', industries: ['汽车', '家用电器', '机械设备', '电力设备', '国防军工'] },
+    { id: 'smallcap-growth', name: '中小盘成长', displayIndustries: '创业板、中证1000、专精特新、小微盘', industries: ['计算机', '传媒', '机械设备', '环保', '综合'] }
 ];
 
 const STYLE_ROTATIONS = [
@@ -77,16 +77,12 @@ const STYLE_ROTATIONS = [
 const VALUE_STOCKS = [
     { code: '601398.SH', name: '工商银行', issueRisk: '低' },
     { code: '601288.SH', name: '农业银行', issueRisk: '低' },
-    { code: '600028.SH', name: '中国石化', issueRisk: '中' },
-    { code: '601088.SH', name: '中国神华', issueRisk: '低' },
-    { code: '600900.SH', name: '长江电力', issueRisk: '低' },
-    { code: '600519.SH', name: '贵州茅台', issueRisk: '低' },
-    { code: '000651.SZ', name: '格力电器', issueRisk: '低' },
-    { code: '600887.SH', name: '伊利股份', issueRisk: '低' },
-    { code: '601318.SH', name: '中国平安', issueRisk: '中' },
+    { code: '601939.SH', name: '建设银行', issueRisk: '低' },
+    { code: '601988.SH', name: '中国银行', issueRisk: '低' },
     { code: '600036.SH', name: '招商银行', issueRisk: '低' },
-    { code: '601668.SH', name: '中国建筑', issueRisk: '中' },
-    { code: '601857.SH', name: '中国石油', issueRisk: '中' }
+    { code: '600519.SH', name: '贵州茅台', issueRisk: '低' },
+    { code: '600900.SH', name: '长江电力', issueRisk: '低' },
+    { code: '601088.SH', name: '中国神华', issueRisk: '低' }
 ];
 
 module.exports = {
