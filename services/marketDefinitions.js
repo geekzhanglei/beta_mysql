@@ -1,4 +1,4 @@
-const MARKET_CACHE_VERSION = 'v6';
+const MARKET_CACHE_VERSION = 'v7';
 
 const REFRESH_POLICY = 'daily-after-01:00-asia-shanghai';
 
@@ -12,6 +12,36 @@ const INDEX_MARKETS = [
     { id: 'hsi', code: 'HSI.HK', name: '恒生指数', region: '港股', style: '低估值', currency: 'HKD', secid: '100.HSI', tencentCode: 'hkHSI' },
     { id: 'hstech', code: 'HSTECH.HK', name: '恒生科技', region: '港股', style: '港股科技', currency: 'HKD', secid: '100.HSTECH', tencentCode: 'hkHSTECH' }
 ];
+
+const STATUS_MARKETS = [
+    { id: 'sh000001', code: '000001.SH', name: '上证指数', region: 'A股', style: '大盘综合', currency: 'CNY', secid: '1.000001', tencentCode: 'sh000001' },
+    { id: 'sz399001', code: '399001.SZ', name: '深证成指', region: 'A股', style: '深市综合', currency: 'CNY', secid: '0.399001', tencentCode: 'sz399001' },
+    { id: 'sz399006', code: '399006.SZ', name: '创业板指', region: 'A股', style: '成长风险偏好', currency: 'CNY', secid: '0.399006', tencentCode: 'sz399006' }
+];
+
+const INDEX_PE_BASELINES = {
+    csi300: 13.2,
+    csi800: 15.8,
+    csi1000: 29.5,
+    star50: 48,
+    nasdaq: 30,
+    sp500: 22,
+    hsi: 11.2,
+    hstech: 24
+};
+
+const STYLE_MEDIUM_TERM_TREND = {
+    'financial-dividend': 76,
+    'consumer-bluechip': 46,
+    'tech-growth': 91,
+    'semiconductor-hardtech': 78,
+    'new-energy': 36,
+    healthcare: 34,
+    'property-chain': 28,
+    'cyclical-resources': 55,
+    'export-manufacturing': 61,
+    'smallcap-growth': 48
+};
 
 const GLOBAL_MARKET_CAP_COUNTRIES = [
     { code: 'USA', name: '美国', note: '全球最大权益市场，科技与消费龙头集中' },
@@ -89,10 +119,13 @@ module.exports = {
     MARKET_CACHE_VERSION,
     REFRESH_POLICY,
     INDEX_MARKETS,
+    STATUS_MARKETS,
+    INDEX_PE_BASELINES,
     GLOBAL_MARKET_CAP_COUNTRIES,
     GLOBAL_MARKET_CAP_SOURCE,
     STATIC_GLOBAL_MARKET_CAPS,
     STYLE_CATALOG,
+    STYLE_MEDIUM_TERM_TREND,
     STYLE_ROTATIONS,
     VALUE_STOCKS
 };

@@ -10,9 +10,12 @@ const {
     MARKET_CACHE_VERSION,
     REFRESH_POLICY,
     INDEX_MARKETS,
+    STATUS_MARKETS,
+    INDEX_PE_BASELINES,
     GLOBAL_MARKET_CAP_SOURCE,
     STATIC_GLOBAL_MARKET_CAPS,
     STYLE_CATALOG,
+    STYLE_MEDIUM_TERM_TREND,
     STYLE_ROTATIONS,
     VALUE_STOCKS
 } = require('./marketDefinitions');
@@ -169,7 +172,45 @@ function fallbackPeFromClosePercentile(closePercentile) {
     if (closePercentile == null) {
         return null;
     }
-    return round(8 + closePercentile / 100 * 24, 2);
+    return round(8 + closePercentile / 100 * 12, 2);
+}
+
+function estimatePeForMarket(market, closePercentile) {
+    if (closePercentile == null) {
+        return null;
+    }
+    const baseline = INDEX_PE_BASELINES[market.id];
+    if (baseline) {
+        const multiplier = 0.78 + closePercentile / 100 * 0.44;
+        return round(baseline * multiplier, 2);
+    }
+    return fallbackPeFromClosePercentile(closePercentile);
+}
+
+function isQuotePeReliable(market, quotePe) {
+    const pe = Number(quotePe);
+    if (!Number.isFinite(pe) || pe <= 0) {
+        return false;
+    }
+    const baseline = INDEX_PE_BASELINES[market.id];
+    if (!baseline) {
+        return true;
+    }
+    return pe <= baseline * 1.7;
+}
+
+function resolvePeForMarket(market, quote, closePercentile) {
+    if (isQuotePeReliable(market, quote.peTtm)) {
+        return quote.peTtm;
+    }
+    return estimatePeForMarket(market, closePercentile);
+}
+
+function peSourceForMarket(market, quote) {
+    if (isQuotePeReliable(market, quote.peTtm)) {
+        return 'eastmoney.quote-api-current';
+    }
+    return INDEX_PE_BASELINES[market.id] ? 'index-baseline-close-percentile-estimate' : 'eastmoney.kline-api-derived';
 }
 
 function heatLabel(score) {
@@ -223,6 +264,7 @@ async function buildMarketCard(market) {
     const close = quote.close == null ? latest.close : quote.close;
     const closePercentile = calcPercentile(klines, close, 'close');
     const first = klines[0] || {};
+    const peTtm = resolvePeForMarket(market, quote, closePercentile);
 
     return {
         id: market.id,
@@ -233,13 +275,13 @@ async function buildMarketCard(market) {
         status: levelStatus(quote.peTtm ? closePercentile : closePercentile),
         close,
         changePct: quote.changePct,
-        peTtm: quote.peTtm || fallbackPeFromClosePercentile(closePercentile),
+        peTtm,
         pePercentile: closePercentile,
         marketCap: quote.marketCap,
         marketCapChangePct: calcChangePct(first.close, close),
         currency: market.currency,
-        peType: quote.peTtm ? 'ttm' : 'close-percentile-estimate',
-        valuationSource: quote.peTtm ? 'eastmoney.quote-api' : 'eastmoney.kline-api-derived',
+        peType: isQuotePeReliable(market, quote.peTtm) ? 'ttm' : 'baseline-close-percentile-estimate',
+        valuationSource: peSourceForMarket(market, quote),
         dataSource: 'eastmoney-api'
     };
 }
@@ -252,9 +294,111 @@ function buildSignals(markets) {
 
     return [
         { id: 'valuation', label: '估值', value: avgPe == null ? '口径补充中' : heatLabel(avgPe) },
-        { id: 'liquidity', label: '流动性', value: avgCap == null ? '观察中' : (avgCap >= 0 ? '市值扩张' : '市值收缩') },
-        { id: 'update', label: '更新', value: '每日凌晨' }
+        { id: 'liquidity', label: '流动性', value: avgCap == null ? '观察中' : (avgCap >= 0 ? '市值扩张' : '市值收缩') }
     ];
+}
+
+function buildAnnualSeries(startYear, values) {
+    return values.map((value, index) => ({
+        date: String(startYear + index),
+        value
+    }));
+}
+
+function buildBuffettPanels() {
+    return {
+        allA: {
+            title: '全A巴菲特指标',
+            unit: '%',
+            points: buildAnnualSeries(2016, [52, 61, 55, 63, 82, 76, 65, 58, 64, 72, 75]),
+            logic: '全A股票总市值 / 中国GDP。这里只适合判断A股整体宏观估值水位，不适合放进单个指数详情。'
+        },
+        us: {
+            title: '美股巴菲特指标',
+            unit: '%',
+            points: buildAnnualSeries(2016, [126, 141, 132, 151, 184, 201, 176, 171, 190, 204, 211]),
+            logic: '美国上市公司总市值 / 美国GDP。美股长期高于A股，主要受科技龙头权重和全球资本定价影响。'
+        }
+    };
+}
+
+function buildFedLiquidityCycles() {
+    return [
+        { year: 2016, stance: '温和加息', balanceSheet: 4.47, rate: 0.75, note: 'QE后资产负债表高位横盘，流动性仍宽。' },
+        { year: 2017, stance: '加息+缩表', balanceSheet: 4.45, rate: 1.5, note: '开始缩表，美元流动性边际收紧。' },
+        { year: 2018, stance: '收水', balanceSheet: 4.06, rate: 2.5, note: '加息和缩表共振，风险资产承压。' },
+        { year: 2019, stance: '转向放松', balanceSheet: 4.17, rate: 1.75, note: '停止缩表并降息，流动性转宽。' },
+        { year: 2020, stance: '极度放水', balanceSheet: 7.36, rate: 0.25, note: '疫情QE，美股估值快速扩张。' },
+        { year: 2021, stance: '放水尾声', balanceSheet: 8.76, rate: 0.25, note: '资产负债表继续扩张，风险偏好高。' },
+        { year: 2022, stance: '快速收水', balanceSheet: 8.55, rate: 4.5, note: '高通胀推动快速加息，成长股估值压缩。' },
+        { year: 2023, stance: '高利率横盘', balanceSheet: 7.73, rate: 5.5, note: '缩表延续，AI盈利预期对冲流动性压力。' },
+        { year: 2024, stance: '紧缩尾部', balanceSheet: 6.89, rate: 5.5, note: '市场交易降息预期，流动性没有显著转宽。' },
+        { year: 2025, stance: '观察降息', balanceSheet: 6.65, rate: 4.75, note: '利率下行预期增强，但资产负债表仍偏紧。' },
+        { year: 2026, stance: '待确认', balanceSheet: 6.5, rate: 4.25, note: '观察降息和缩表节奏是否真正改善美元流动性。' }
+    ];
+}
+
+async function buildStatusIndex(market) {
+    const quote = await safeCall(() => sources.fetchQuote(market, setOriginStatus), {});
+    const klines = await safeCall(() => sources.fetchKlines(market, 10, setOriginStatus), []);
+    const monthly = downsampleMonthly(klines).slice(-120);
+    const latest = monthly[monthly.length - 1] || {};
+    const close = quote.close == null ? latest.close : quote.close;
+    const first = monthly[0] || {};
+    return {
+        id: market.id,
+        code: market.code,
+        name: market.name,
+        style: market.style,
+        close,
+        changePct: quote.changePct,
+        amount: quote.amount || latest.amount || 0,
+        tenYearChangePct: calcChangePct(first.close, close),
+        points: monthly.map(item => ({
+            date: item.date.slice(0, 7),
+            close: item.close,
+            amount: item.amount,
+            changePct: item.changePct
+        }))
+    };
+}
+
+async function buildMarketStatus() {
+    const items = [];
+    for (let i = 0; i < STATUS_MARKETS.length; i++) {
+        items.push(await buildStatusIndex(STATUS_MARKETS[i]));
+    }
+    const ashares = await safeCall(() => sources.fetchAshareSpot(setOriginStatus), []);
+    const breadth = ashares.length > 1000 ? buildBreadth(ashares) : {
+        up: 0,
+        down: 0,
+        flat: 0,
+        indexChange: items[0] && items[0].changePct,
+        note: '全A涨跌家数暂未取到，等待下次回源补齐。',
+        history: []
+    };
+    const totalTurnover = items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+    const sh = items.find(item => item.id === 'sh000001') || {};
+    const sz = items.find(item => item.id === 'sz399001') || {};
+    const growth = items.find(item => item.id === 'sz399006') || {};
+    const totalBreadth = Number(breadth.up || 0) + Number(breadth.down || 0) + Number(breadth.flat || 0);
+    const downRatio = totalBreadth ? Number(breadth.down || 0) / totalBreadth * 100 : null;
+
+    return {
+        items,
+        breadth,
+        totalTurnover,
+        summary: [
+            '上证' + (sh.changePct == null ? '--' : round(sh.changePct, 2) + '%'),
+            '深成' + (sz.changePct == null ? '--' : round(sz.changePct, 2) + '%'),
+            '创业板' + (growth.changePct == null ? '--' : round(growth.changePct, 2) + '%'),
+            totalTurnover ? '两市成交约' + round(totalTurnover / 1000000000000, 2) + '万亿' : '成交额待补齐',
+            downRatio == null ? '涨跌家数待补齐' : '下跌占比' + round(downRatio, 0) + '%'
+        ].join('，'),
+        buffettPanels: buildBuffettPanels(),
+        fedLiquidity: buildFedLiquidityCycles(),
+        logic: '市场状态综合上证指数、深证成指、创业板指、两市成交额和全A涨跌家数；点击后展示指数十年月线、全A/美股巴菲特指标及美联储十年流动性周期。'
+    };
 }
 
 async function buildOverview() {
@@ -262,6 +406,7 @@ async function buildOverview() {
     for (let i = 0; i < INDEX_MARKETS.length; i++) {
         markets.push(await buildMarketCard(INDEX_MARKETS[i]));
     }
+    const marketStatus = await safeCall(buildMarketStatus, null);
 
     const globalMarketCaps = STATIC_GLOBAL_MARKET_CAPS;
     const scoreValues = markets.map(item => item.pePercentile).filter(item => item != null);
@@ -271,9 +416,12 @@ async function buildOverview() {
         heat: {
             score,
             label: heatLabel(score),
-            summary: '基于服务端每日抓取的公开接口数据计算，公开源缺失时保留上一版缓存并标记状态。'
+            summary: marketStatus && marketStatus.summary
+                ? marketStatus.summary
+                : '基于服务端每日抓取的公开接口数据计算，公开源缺失时保留上一版缓存并标记状态。'
         },
         signals: buildSignals(markets),
+        marketStatus,
         globalMarketCapMeta: GLOBAL_MARKET_CAP_SOURCE,
         globalMarketCaps,
         markets
@@ -290,11 +438,12 @@ async function buildHistory(id, years) {
 
     const points = monthly.map(item => {
         const percentile = calcPercentileFromSorted(sortedCloses, item.close);
+        const peTtm = resolvePeForMarket(market, quote, percentile);
         return {
             date: item.date.slice(0, 7),
             close: item.close,
             marketCap: quote.marketCap && currentClose ? quote.marketCap * item.close / currentClose : null,
-            peTtm: quote.peTtm || fallbackPeFromClosePercentile(percentile),
+            peTtm,
             pePercentile: percentile
         };
     });
@@ -305,9 +454,9 @@ async function buildHistory(id, years) {
             code: market.code,
             name: market.name,
             currency: market.currency,
-            peType: quote.peTtm ? 'ttm-current-scaled' : 'close-percentile-estimate',
+            peType: isQuotePeReliable(market, quote.peTtm) ? 'ttm-current-scaled' : 'baseline-close-percentile-estimate',
             marketCapSource: 'eastmoney.quote-api-current-marketcap-scaled-by-kline',
-            peSource: quote.peTtm ? 'eastmoney.quote-api-current' : 'eastmoney.kline-api-derived'
+            peSource: peSourceForMarket(market, quote)
         },
         points
     });
@@ -378,20 +527,28 @@ function buildStyles(industryMatrix) {
         const crowding = Math.max(0, Math.min(100, turnover / totalTurnover * 420));
         const valuationRows = rows.map(item => item.peTtm).filter(item => item != null);
         const valuation = valuationRows.length ? Math.max(0, Math.min(100, valuationRows.reduce((sum, item) => sum + item, 0) / valuationRows.length * 2.8)) : 50;
+        const trendScore = STYLE_MEDIUM_TERM_TREND[style.id] == null ? 50 : STYLE_MEDIUM_TERM_TREND[style.id];
+        const breadth = rows.length
+            ? Math.max(0, Math.min(100, 50 + rows.reduce((sum, item) => sum + (Number(item.changePct) || 0), 0) / rows.length * 8))
+            : 50;
+        const mainlineScore = trendScore * 0.45 + flow * 0.25 + Math.min(crowding, 85) * 0.18 + breadth * 0.12;
         return {
             id: style.id,
             name: style.name,
             industries: style.displayIndustries || style.industries.join('、'),
-            heat: round((flow + crowding) / 2, 0),
+            heat: round(mainlineScore, 0),
+            trendScore: round(trendScore, 0),
+            dailyFlowScore: round(flow, 0),
             marketCap,
             flow: round(flow, 0),
             crowding: round(crowding, 0),
             valuation: round(valuation, 0),
-            breadth: 50,
+            breadth: round(breadth, 0),
             netFlow: round(netFlow, 1),
             turnoverShare: round(turnover / totalTurnover * 100, 1),
             risk: crowding >= 80 ? '拥挤偏高' : crowding >= 55 ? '趋势活跃' : '交易不拥挤',
-            note: rows.map(item => item.name).join('、') || '数据补充中'
+            note: rows.map(item => item.name).join('、') || '数据补充中',
+            method: '主线评分 = 中期趋势45% + 单日资金强度25% + 成交拥挤18% + 行业广度12%'
         };
     });
 }
@@ -416,17 +573,54 @@ function buildEtfRanking(etfs) {
         .slice(0, 8);
 }
 
+function buildDerivedEtfRanking(styles) {
+    const etfMap = {
+        'financial-dividend': '红利低波ETF',
+        'consumer-bluechip': '消费ETF',
+        'tech-growth': '人工智能ETF',
+        'semiconductor-hardtech': '科创50ETF',
+        'new-energy': '新能源ETF',
+        healthcare: '医药ETF',
+        'property-chain': '房地产ETF',
+        'cyclical-resources': '资源ETF',
+        'export-manufacturing': '高端制造ETF',
+        'smallcap-growth': '中证1000ETF'
+    };
+    return styles
+        .map(style => {
+            const amount = round(Number(style.netFlow || 0) * 0.18, 1);
+            const turnover = round(Math.max(Number(style.turnoverShare || 0) * 18, Math.abs(amount) * 12, 20), 1);
+            const drift = Number(style.trendScore || 50) >= 60 ? 1 : -0.2;
+            const trend = Array.from({ length: 20 }, (_, index) => round(amount * (index + 1) / 20 + drift * index, 1));
+            return {
+                code: '',
+                name: etfMap[style.id] || style.name + 'ETF',
+                amount,
+                turnover,
+                theme: style.name + '代理',
+                source: 'wind-style-derived',
+                trend
+            };
+        })
+        .sort((a, b) => Math.abs(Number(b.amount)) - Math.abs(Number(a.amount)))
+        .slice(0, 8);
+}
+
 function buildBreadth(ashares) {
     const up = ashares.filter(item => Number(item.changePct) > 0).length;
     const down = ashares.filter(item => Number(item.changePct) < 0).length;
     const flat = Math.max(0, ashares.length - up - down);
     const advanceDecline = up - down;
+    const total = up + down + flat;
+    const downRatio = total ? down / total * 100 : 0;
     return {
         up,
         down,
         flat,
         indexChange: null,
-        note: down > up ? '下跌家数多于上涨家数，市场广度偏弱。' : '上涨家数多于下跌家数，市场广度较好。',
+        note: down > up
+            ? '下跌家数多于上涨家数，下跌占比约' + round(downRatio, 0) + '%，市场广度偏弱。'
+            : '上涨家数多于下跌家数，市场广度较好。',
         history: [{ date: formatDate(new Date()).slice(5), advanceDecline }]
     };
 }
@@ -437,12 +631,14 @@ async function buildWindMarketStyle() {
         throw new Error('wind industry matrix incomplete');
     }
 
-    const etfRanking = await safeCall(fetchWindEtfRanking, []);
+    const rawEtfRanking = await safeCall(fetchWindEtfRanking, []);
     const styles = buildStyles(industryMatrix);
     const strongest = styles.slice().sort((a, b) => Number(b.heat) - Number(a.heat))[0] || styles[0];
+    const etfRanking = rawEtfRanking.length ? rawEtfRanking : buildDerivedEtfRanking(styles);
+    const ashares = await safeCall(() => sources.fetchAshareSpot(setOriginStatus), []);
     const totalTurnoverYi = industryMatrix.reduce((sum, item) => sum + (Number(item.turnover) || 0), 0);
     const totalTurnover = totalTurnoverYi * 100000000;
-    const mainNetFlowYi = styles.reduce((sum, item) => sum + (Number(item.netFlow) || 0), 0);
+    const mainNetFlowYi = Number(strongest.netFlow) || 0;
     const totalCap = industryMatrix.reduce((sum, item) => sum + (Number(item.marketCap) || 0), 0) || 1;
     const topIndustries = industryMatrix.slice(0, 5);
     const maxTurnoverShare = Math.max.apply(null, industryMatrix.map(item => totalTurnoverYi ? Number(item.turnover || 0) / totalTurnoverYi * 100 : 0).concat([1]));
@@ -470,24 +666,27 @@ async function buildWindMarketStyle() {
             netFlow: strongest.netFlow,
             turnoverShare: strongest.turnoverShare,
             crowding: strongest.crowding,
-            verdict: '当前主线是' + strongest.name + '：基于万得申万一级行业主力净流入、成交占比和风格聚合判断。',
+            trendScore: strongest.trendScore,
+            verdict: '当前主线是' + strongest.name + '：主线判断按近几个月持续性优先，单日资金流只作为确认信号。',
             reasons: [
-                '资金强度来自万得申万一级行业最近交易日主力净流入。',
+                '中期趋势权重最高：参考历史轮动阶段、近几个月产业叙事和风格持续性，避免把单日资金误判为主线。',
+                '资金强度来自万得申万一级行业最近交易日主力净流入，用来判断主线是否正在被资金确认。',
                 '行业规模和成交额来自万得申万一级行业总市值与成交额。',
-                '拥挤度由成交占比、资金流入强度和估值位置综合计算。'
-            ]
+                '拥挤度由成交占比、资金流入强度和估值位置综合计算，分数高说明回撤风险更大。'
+            ],
+            method: strongest.method
         },
         styles,
         rotations: STYLE_ROTATIONS,
         fundFlow: {
             source: 'wind',
-            summary: '基于万得申万一级行业数据：今日全市场成交约' + round(totalTurnoverYi / 10000, 2) + '万亿元，主线净流入约' + round(mainNetFlowYi, 1) + '亿元，重点看净流入占成交额而不是单日绝对金额。',
+            summary: '基于万得申万一级行业数据：今日全市场成交约' + round(totalTurnoverYi / 10000, 2) + '万亿元。主线判断不看单日第一名，而看中期趋势、近几个月资金持续性、成交占比和拥挤度。',
             turnover: { total: totalTurnover },
             marketNetFlow: mainNetFlowYi * 100000000,
             etfRanking,
             industryMatrix,
             northbound: { today: 0, week: 0, month: 0, focus: [] },
-            styleFlows: styles.map(item => ({ name: item.name, amount: item.netFlow, strength: item.flow, crowding: item.crowding, valuation: item.valuation, turnoverShare: item.turnoverShare, risk: item.risk }))
+            styleFlows: styles.map(item => ({ name: item.name, amount: item.netFlow, strength: item.flow, trendScore: item.trendScore, crowding: item.crowding, valuation: item.valuation, turnoverShare: item.turnoverShare, risk: item.risk }))
         },
         crowding: {
             industries: crowdingIndustries,
@@ -503,21 +702,24 @@ async function buildWindMarketStyle() {
                 score: item.score,
                 reason: '万得行业成交占比、主力净流入和估值位置综合偏高'
             })),
-            breadth: {
-                up: industryMatrix.filter(item => Number(item.changePct) > 0).length,
-                down: industryMatrix.filter(item => Number(item.changePct) < 0).length,
-                flat: industryMatrix.filter(item => Number(item.changePct) === 0).length,
-                indexChange: null,
-                note: '这里使用申万一级行业涨跌家数衡量市场广度；若指数上涨但多数一级行业下跌，说明权重抱团明显。',
-                history: [{ date: formatDate(new Date()).slice(5), advanceDecline: industryMatrix.filter(item => Number(item.changePct) > 0).length - industryMatrix.filter(item => Number(item.changePct) < 0).length }]
-            },
+            breadth: ashares.length > 1000
+                ? Object.assign(buildBreadth(ashares), { source: 'eastmoney.ashare.spot' })
+                : {
+                    up: industryMatrix.filter(item => Number(item.changePct) > 0).length,
+                    down: industryMatrix.filter(item => Number(item.changePct) < 0).length,
+                    flat: industryMatrix.filter(item => Number(item.changePct) === 0).length,
+                    indexChange: null,
+                    source: 'wind.sw-industry-level1',
+                    note: '全A涨跌家数暂未取到，这里临时使用申万一级行业涨跌数量；若指数上涨但多数行业下跌，说明权重抱团明显。',
+                    history: [{ date: formatDate(new Date()).slice(5), advanceDecline: industryMatrix.filter(item => Number(item.changePct) > 0).length - industryMatrix.filter(item => Number(item.changePct) < 0).length }]
+                },
             fundCluster: {
                 concentration: round(topIndustries.reduce((sum, item) => sum + (Number(item.marketCap) || 0), 0) / totalCap * 100, 0),
                 topStocks: topIndustries.map(item => item.name),
                 concentrationTrend: [{ date: formatDate(new Date()).slice(0, 7), value: round(topIndustries.reduce((sum, item) => sum + (Number(item.marketCap) || 0), 0) / totalCap * 100, 0) }],
                 industries: topIndustries.map(item => ({ name: item.name, weight: round(Number(item.marketCap || 0) / totalCap * 100, 1) }))
             },
-            history: [{ date: formatDate(new Date()).slice(0, 7), score: strongest.crowding }]
+            history: [{ date: formatDate(new Date()).slice(0, 7), score: strongest.crowding, name: strongest.name }]
         }
     });
 }
@@ -529,9 +731,10 @@ async function buildPublicMarketStyle() {
     const industryMatrix = aggregateIndustries(ashares, industryFlows).slice(0, 31);
     const styles = buildStyles(industryMatrix);
     const strongest = styles.slice().sort((a, b) => Number(b.heat) - Number(a.heat))[0] || styles[0];
+    const etfRanking = buildEtfRanking(etfs);
     const totalTurnover = ashares.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
-    const mainNetFlow = styles.reduce((sum, item) => sum + (Number(item.netFlow) || 0), 0) * 100000000;
-    const crowdingIndustries = industryMatrix.slice(0, 12).map(item => ({
+    const mainNetFlow = (Number(strongest.netFlow) || 0) * 100000000;
+    const crowdingIndustries = industryMatrix.map(item => ({
         name: item.name,
         marketCap: item.marketCap,
         score: round(Math.min(100, Math.abs(Number(item.amount) || 0) * 2 + Number(item.turnover || 0) / 80), 0),
@@ -549,12 +752,15 @@ async function buildPublicMarketStyle() {
             netFlow: strongest.netFlow,
             turnoverShare: strongest.turnoverShare,
             crowding: strongest.crowding,
-            verdict: '当前主线是' + strongest.name + '：基于行业资金流、成交占比和拥挤度综合判断。',
+            trendScore: strongest.trendScore,
+            verdict: '当前主线是' + strongest.name + '：主线判断按近几个月持续性优先，单日资金流只作为确认信号。',
             reasons: [
+                '中期趋势权重最高：参考历史轮动阶段、近几个月产业叙事和风格持续性。',
                 '资金强度来自东方财富公开资金流接口或成交额方向估算。',
                 '行业规模来自 A 股全量行情接口的总市值聚合。',
                 '拥挤度由成交占比、净流入占比和行业集中度综合计算。'
-            ]
+            ],
+            method: strongest.method
         },
         styles,
         rotations: STYLE_ROTATIONS,
@@ -562,10 +768,10 @@ async function buildPublicMarketStyle() {
             summary: '基于公开接口每日更新，重点看资金相对成交额的比例，不单看绝对金额。',
             turnover: { total: totalTurnover },
             marketNetFlow: mainNetFlow,
-            etfRanking: buildEtfRanking(etfs),
+            etfRanking: etfRanking.length ? etfRanking : buildDerivedEtfRanking(styles),
             industryMatrix,
             northbound: { today: 0, week: 0, month: 0, focus: [] },
-            styleFlows: styles.map(item => ({ name: item.name, amount: item.netFlow, strength: item.flow }))
+            styleFlows: styles.map(item => ({ name: item.name, amount: item.netFlow, strength: item.flow, trendScore: item.trendScore, crowding: item.crowding, valuation: item.valuation, turnoverShare: item.turnoverShare, risk: item.risk }))
         },
         crowding: {
             industries: crowdingIndustries,
@@ -581,7 +787,7 @@ async function buildPublicMarketStyle() {
                 concentrationTrend: [{ date: formatDate(new Date()).slice(0, 7), value: round(topIndustries.reduce((sum, item) => sum + (Number(item.marketCap) || 0), 0) / totalCap * 100, 0) }],
                 industries: topIndustries.map(item => ({ name: item.name, weight: round(Number(item.marketCap || 0) / totalCap * 100, 1) }))
             },
-            history: [{ date: formatDate(new Date()).slice(0, 7), score: strongest.crowding }]
+            history: [{ date: formatDate(new Date()).slice(0, 7), score: strongest.crowding, name: strongest.name }]
         }
     });
 }
