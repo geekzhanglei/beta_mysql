@@ -65,8 +65,25 @@ function pick(row, names) {
 
 function pickNumber(row, names) {
     const value = pick(row, names);
-    const num = sources.normalizeNumber ? sources.normalizeNumber(value) : Number(value);
+    const normalized = typeof value === 'string'
+        ? value.replace(/,/g, '')
+            .replace(/%/g, '')
+            .replace(/倍/g, '')
+            .replace(/万亿美元|万亿港元|万亿元|万亿|亿元|亿美元/g, '')
+            .trim()
+        : value;
+    const num = sources.normalizeNumber ? sources.normalizeNumber(normalized) : Number(normalized);
     return num == null || Number.isNaN(num) ? null : num;
+}
+
+function pickYear(row, names) {
+    const num = pickNumber(row, names);
+    if (num) {
+        return Number(num);
+    }
+    const value = pick(row, names);
+    const match = String(value || '').match(/\d{4}/);
+    return match ? Number(match[0]) : null;
 }
 
 function cleanIndustryName(name) {
@@ -338,6 +355,66 @@ function buildFedLiquidityCycles() {
     ];
 }
 
+function normalizePercentValue(value) {
+    const num = Number(value);
+    if (!Number.isFinite(num)) {
+        return null;
+    }
+    return Math.abs(num) <= 3 ? round(num * 100, 1) : round(num, 1);
+}
+
+async function fetchWindMacroStatus() {
+    const result = await wind.callWind('analytics_data', 'get_financial_data', {
+        question: '取2016年至2026年每年中国A股总市值/GDP巴菲特指标、美国股票总市值/GDP巴菲特指标、美联储资产负债表规模、联邦基金目标利率和货币政策状态，返回结构化表，字段包含年份、全A巴菲特指标、美股巴菲特指标、美联储资产负债表规模万亿美元、联邦基金利率、政策状态、说明',
+        lang: '中文'
+    }, { timeout: 120000 });
+    const rows = firstWindTable(result).rows;
+    const parsed = rows.map(row => {
+        const year = pickYear(row, ['年份', '年度', '年']);
+        if (!year) {
+            return null;
+        }
+        return {
+            year: Number(year),
+            allA: normalizePercentValue(pickNumber(row, ['全A巴菲特指标', '中国A股总市值/GDP巴菲特指标', '中国A股总市值/GDP', 'A股总市值/GDP'])),
+            us: normalizePercentValue(pickNumber(row, ['美股巴菲特指标', '美国股票总市值/GDP巴菲特指标', '美国股票总市值/GDP', '美国股市总市值/GDP'])),
+            balanceSheet: round(pickNumber(row, ['美联储资产负债表规模万亿美元', '美联储资产负债表规模', '美联储总资产', '资产负债表规模']) || 0, 2),
+            rate: round(pickNumber(row, ['联邦基金利率', '联邦基金目标利率', '目标利率']) || 0, 2),
+            stance: pick(row, ['政策状态', '货币政策状态', '状态']) || '',
+            note: pick(row, ['说明', '备注', '政策说明']) || ''
+        };
+    }).filter(item => item && item.year >= 2016 && item.year <= 2026);
+
+    if (parsed.length < 8) {
+        throw new Error('wind macro status incomplete');
+    }
+
+    const sorted = parsed.sort((a, b) => a.year - b.year);
+    return {
+        buffettPanels: {
+            allA: {
+                title: '全A巴菲特指标',
+                unit: '%',
+                points: sorted.filter(item => item.allA != null).map(item => ({ date: String(item.year), value: item.allA })),
+                logic: '全A股票总市值 / 中国GDP。优先来自万得结构化宏观与市场容量数据。'
+            },
+            us: {
+                title: '美股巴菲特指标',
+                unit: '%',
+                points: sorted.filter(item => item.us != null).map(item => ({ date: String(item.year), value: item.us })),
+                logic: '美国股票总市值 / 美国GDP。优先来自万得结构化宏观与市场容量数据。'
+            }
+        },
+        fedLiquidity: sorted.map(item => ({
+            year: item.year,
+            stance: item.stance || (item.rate >= 4 ? '高利率/偏收水' : item.balanceSheet >= 7 ? '偏放水' : '中性'),
+            balanceSheet: item.balanceSheet,
+            rate: item.rate,
+            note: item.note || '万得结构化取数，按资产负债表规模和政策利率辅助判断流动性状态。'
+        }))
+    };
+}
+
 async function buildStatusIndex(market) {
     const quote = await safeCall(() => sources.fetchQuote(market, setOriginStatus), {});
     const klines = await safeCall(() => sources.fetchKlines(market, 10, setOriginStatus), []);
@@ -383,6 +460,7 @@ async function buildMarketStatus() {
     const growth = items.find(item => item.id === 'sz399006') || {};
     const totalBreadth = Number(breadth.up || 0) + Number(breadth.down || 0) + Number(breadth.flat || 0);
     const downRatio = totalBreadth ? Number(breadth.down || 0) / totalBreadth * 100 : null;
+    const macro = await safeCall(fetchWindMacroStatus, null);
 
     return {
         items,
@@ -395,8 +473,8 @@ async function buildMarketStatus() {
             totalTurnover ? '两市成交约' + round(totalTurnover / 1000000000000, 2) + '万亿' : '成交额待补齐',
             downRatio == null ? '涨跌家数待补齐' : '下跌占比' + round(downRatio, 0) + '%'
         ].join('，'),
-        buffettPanels: buildBuffettPanels(),
-        fedLiquidity: buildFedLiquidityCycles(),
+        buffettPanels: macro && macro.buffettPanels ? macro.buffettPanels : buildBuffettPanels(),
+        fedLiquidity: macro && macro.fedLiquidity ? macro.fedLiquidity : buildFedLiquidityCycles(),
         logic: '市场状态综合上证指数、深证成指、创业板指、两市成交额和全A涨跌家数；点击后展示指数十年月线、全A/美股巴菲特指标及美联储十年流动性周期。'
     };
 }
