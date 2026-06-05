@@ -10,6 +10,8 @@ const {
     MARKET_CACHE_VERSION,
     REFRESH_POLICY,
     INDEX_MARKETS,
+    GLOBAL_MARKET_CAP_SOURCE,
+    STATIC_GLOBAL_MARKET_CAPS,
     STYLE_CATALOG,
     STYLE_ROTATIONS,
     VALUE_STOCKS
@@ -165,7 +167,7 @@ async function buildOverview() {
         markets.push(await buildMarketCard(INDEX_MARKETS[i]));
     }
 
-    const globalMarketCaps = await safeCall(() => sources.fetchWorldBankMarketCaps(setOriginStatus), []);
+    const globalMarketCaps = STATIC_GLOBAL_MARKET_CAPS;
     const scoreValues = markets.map(item => item.pePercentile).filter(item => item != null);
     const score = scoreValues.length ? Math.round(scoreValues.reduce((sum, item) => sum + item, 0) / scoreValues.length) : 50;
 
@@ -176,6 +178,7 @@ async function buildOverview() {
             summary: '基于服务端每日抓取的公开接口数据计算，公开源缺失时保留上一版缓存并标记状态。'
         },
         signals: buildSignals(markets),
+        globalMarketCapMeta: GLOBAL_MARKET_CAP_SOURCE,
         globalMarketCaps,
         markets
     });

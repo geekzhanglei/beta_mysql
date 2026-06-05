@@ -1,4 +1,4 @@
-const MARKET_CACHE_VERSION = 'v4';
+const MARKET_CACHE_VERSION = 'v5';
 
 const REFRESH_POLICY = 'daily-after-01:00-asia-shanghai';
 
@@ -25,6 +25,30 @@ const GLOBAL_MARKET_CAP_COUNTRIES = [
     { code: 'CHE', name: '瑞士', note: '医药、消费和金融防御属性强' },
     { code: 'HKG', name: '中国香港', note: '中国资产离岸定价核心市场，科技与金融权重高' }
 ];
+
+const GLOBAL_MARKET_CAP_SOURCE = {
+    title: 'Visual Capitalist - Ranked: The World’s Largest Stock Markets',
+    url: 'https://www.visualcapitalist.com/ranked-the-worlds-largest-stock-markets/',
+    originalSource: 'Bloomberg calculations of domestically listed companies across each country’s major exchanges',
+    publishedAt: '2026-05-26T00:00:00.000Z',
+    dataAsOf: '2026-04-30T00:00:00.000Z'
+};
+
+const STATIC_GLOBAL_MARKET_CAPS = [
+    { name: '美国', cap: 75.04e12, note: '全球最大权益市场，科技与消费龙头集中' },
+    { name: '中国A股', cap: 14.84e12, note: '中国大陆权益资产核心市场，政策和产业周期影响大' },
+    { name: '日本', cap: 8.19e12, note: '制造业、金融和股东回报改革主导' },
+    { name: '中国香港', cap: 7.41e12, note: '中国资产离岸定价核心市场，科技与金融权重高' },
+    { name: '印度', cap: 4.97e12, note: '高增长新兴市场，估值长期偏高' },
+    { name: '加拿大', cap: 4.49e12, note: '资源、金融和周期行业权重大' },
+    { name: '中国台湾', cap: 4.48e12, note: '半导体和AI硬件供应链权重高' },
+    { name: '韩国', cap: 4.04e12, note: '半导体、电子和出口制造占比较高' },
+    { name: '英国', cap: 3.99e12, note: '金融、能源和防御型资产占比较高' },
+    { name: '法国', cap: 3.45e12, note: '奢侈品、工业和金融权重高' }
+].map(item => Object.assign({
+    date: '2026-04',
+    source: 'visualcapitalist:bloomberg-apr-2026'
+}, item));
 
 const STYLE_CATALOG = [
     { id: 'financial-dividend', name: '金融红利', industries: ['银行', '非银金融', '公用事业', '交通运输', '煤炭'] },
@@ -70,6 +94,8 @@ module.exports = {
     REFRESH_POLICY,
     INDEX_MARKETS,
     GLOBAL_MARKET_CAP_COUNTRIES,
+    GLOBAL_MARKET_CAP_SOURCE,
+    STATIC_GLOBAL_MARKET_CAPS,
     STYLE_CATALOG,
     STYLE_ROTATIONS,
     VALUE_STOCKS
