@@ -1,8 +1,10 @@
 const { spawn } = require('child_process');
+const { existsSync } = require('fs');
 const os = require('os');
 const path = require('path');
 
-const DEFAULT_WIND_CLI_PATH = path.join(os.homedir(), '.codex', 'skills', 'wind-mcp-skill', 'scripts', 'cli.mjs');
+const PROJECT_WIND_CLI_PATH = path.join(__dirname, '..', 'vendor', 'wind-mcp-skill', 'scripts', 'cli.mjs');
+const HOME_WIND_CLI_PATH = path.join(os.homedir(), '.codex', 'skills', 'wind-mcp-skill', 'scripts', 'cli.mjs');
 const DEFAULT_TIMEOUT = Number(process.env.WIND_REQUEST_TIMEOUT || 90000);
 const MAX_STDOUT_BYTES = Number(process.env.WIND_MAX_STDOUT_BYTES || 12 * 1024 * 1024);
 
@@ -51,7 +53,7 @@ function normalizeWindResult(stdout) {
 }
 
 function callWind(serverType, toolName, params, options) {
-    const cliPath = process.env.WIND_CLI_PATH || DEFAULT_WIND_CLI_PATH;
+    const cliPath = process.env.WIND_CLI_PATH || (existsSync(PROJECT_WIND_CLI_PATH) ? PROJECT_WIND_CLI_PATH : HOME_WIND_CLI_PATH);
     const timeout = Number((options && options.timeout) || DEFAULT_TIMEOUT);
     const startedAt = Date.now();
     const args = [cliPath, 'call', serverType, toolName, JSON.stringify(params || {})];

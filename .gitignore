@@ -4,6 +4,7 @@ node_modules
 /public/upload/
 /public/tmdb-image-cache/
 .env
+vendor/wind-mcp-skill/config.json
 
 # local env files
 .env.local

@@ -62,10 +62,13 @@ jobs:
     # 使用 SSH 插件连接到你的云服务器并执行命令
     - name: Deploy to Server
       uses: appleboy/ssh-action@v1.0.3
+      env:
+        WIND_API_KEY: ${{ secrets.WIND_API_KEY }}
       with:
         host: ${{ secrets.SERVER_HOST }}
         username: ${{ secrets.SERVER_USER }}
         key: ${{ secrets.SERVER_SSH_KEY }}
+        envs: WIND_API_KEY
         # 这一步是关键：它告诉 GitHub 登录你的服务器后，执行哪些命令
         script: |
           # 1. 进入你服务器上的项目目录
@@ -78,4 +81,9 @@ jobs:
           # 4. 使用 npm scripts 进行部署
           corepack enable
           pnpm run install-prod
+          if [ -n "$WIND_API_KEY" ]; then
+            mkdir -p /root/.wind-aifinmarket
+            umask 077
+            printf 'WIND_API_KEY=%s\n' "$WIND_API_KEY" > /root/.wind-aifinmarket/config
+          fi
           pnpm run restart
