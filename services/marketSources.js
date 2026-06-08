@@ -388,6 +388,8 @@ async function fetchDividendEvents(stock, statusReporter) {
     const rows = data && data.result && Array.isArray(data.result.data) ? data.result.data : [];
     return rows.map(row => ({
         date: row.EX_DIVIDEND_DATE || row.REPORT_DATE,
+        reportDate: row.REPORT_DATE,
+        exDividendDate: row.EX_DIVIDEND_DATE,
         plan: row.IMPL_PLAN_PROFILE || '',
         cashDividendRatio: normalizeNumber(row.CASH_DIVIDEND_RATIO)
     })).filter(item => item.date);

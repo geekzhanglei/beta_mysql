@@ -1,4 +1,4 @@
-const MARKET_CACHE_VERSION = 'v11';
+const MARKET_CACHE_VERSION = 'v12';
 
 const REFRESH_POLICY = 'daily-after-01:00-asia-shanghai';
 
@@ -114,7 +114,8 @@ const VALUE_STOCKS = [
     { code: '600519.SH', name: '贵州茅台', issueRisk: '低' },
     { code: '600900.SH', name: '长江电力', issueRisk: '低' },
     { code: '601088.SH', name: '中国神华', issueRisk: '低' },
-    { code: '600941.SH', name: '中国移动', issueRisk: '低' }
+    { code: '600941.SH', name: '中国移动', issueRisk: '低' },
+    { code: '600938.SH', name: '中国海油', issueRisk: '低' }
 ];
 
 module.exports = {

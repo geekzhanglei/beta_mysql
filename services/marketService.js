@@ -166,6 +166,15 @@ async function fetchWindDividendHistory() {
     return firstWindTable(result).rows;
 }
 
+async function fetchWindDividendPerShare2025() {
+    const names = VALUE_STOCKS.map(item => item.name).join('、');
+    const result = await wind.callWind('analytics_data', 'get_financial_data', {
+        question: '取' + names + '2025年度每股现金分红，包含股票代码、证券简称、2025年度每股分红，返回结构化表',
+        lang: '中文'
+    }, { timeout: 120000 });
+    return firstWindTable(result).rows;
+}
+
 function calcPercentile(points, value, key) {
     const list = points.map(item => sources.normalizeNumber(item[key])).filter(item => item != null).sort((a, b) => a - b);
     if (!list.length || value == null) {
@@ -899,6 +908,17 @@ function buildDividendTrend(events, close) {
     });
 }
 
+function buildDividendPerShare(events, targetYear) {
+    const totalPerTenShares = events.reduce((sum, event) => {
+        const year = Number(String(event.reportDate || event.date || '').slice(0, 4));
+        if (year !== targetYear) {
+            return sum;
+        }
+        return sum + (Number(event.cashDividendRatio) || 0);
+    }, 0);
+    return totalPerTenShares ? round(totalPerTenShares / 10, 4) : null;
+}
+
 async function buildValue() {
     const windPayload = await safeCall(buildWindValue, null);
     if (windPayload) {
@@ -912,10 +932,12 @@ async function buildValue() {
         const events = await safeCall(() => sources.fetchDividendEvents(stock, setOriginStatus), []);
         const trend = buildDividendTrend(events, quote.close);
         const dividendYield = trend[trend.length - 1] || 0;
+        const dividendPerShare2025 = buildDividendPerShare(events, 2025);
         stocks.push({
             code: stock.code,
             name: stock.name,
             dividendYield,
+            dividendPerShare2025,
             payout: quote.peTtm && dividendYield ? round(quote.peTtm * dividendYield, 0) : null,
             pe: quote.peTtm,
             issueRisk: stock.issueRisk,
@@ -933,7 +955,8 @@ async function buildValue() {
 async function buildWindValue() {
     const latestRows = await fetchWindValueLatest();
     const historyRows = await fetchWindDividendHistory();
-    if (latestRows.length < VALUE_STOCKS.length || historyRows.length < VALUE_STOCKS.length * 8) {
+    const dividendRows = await fetchWindDividendPerShare2025();
+    if (latestRows.length < VALUE_STOCKS.length || historyRows.length < VALUE_STOCKS.length * 8 || dividendRows.length < VALUE_STOCKS.length) {
         throw new Error('wind value dataset incomplete');
     }
 
@@ -941,6 +964,15 @@ async function buildWindValue() {
     latestRows.forEach(row => {
         const code = pick(row, ['Wind代码', '股票代码', '证券代码']);
         if (code) latestByCode[String(code).toUpperCase()] = row;
+    });
+
+    const dividendPerShareByCode = {};
+    dividendRows.forEach(row => {
+        const code = pick(row, ['Wind代码', '股票代码', '证券代码']);
+        const value = pickNumber(row, ['2025年每股现金分红', '2025年度每股现金分红', '2025年度每股分红', '2025年每股分红', '每股现金分红']);
+        if (code && value != null) {
+            dividendPerShareByCode[String(code).toUpperCase()] = round(value, 4);
+        }
     });
 
     const trendByCode = {};
@@ -976,6 +1008,7 @@ async function buildWindValue() {
             changePct: round(pickNumber(row, ['最新涨跌幅', '涨跌幅']) || 0, 2),
             marketCap: marketCapWanYi == null ? null : round(marketCapWanYi * 1000000000000, 0),
             dividendYield: round(dividendYield, 2),
+            dividendPerShare2025: dividendPerShareByCode[stock.code] == null ? null : dividendPerShareByCode[stock.code],
             payout: pe && dividendYield ? round(pe * dividendYield, 1) : null,
             pe: round(pe, 2),
             issueRisk: stock.issueRisk,
@@ -986,7 +1019,7 @@ async function buildWindValue() {
 
     return withMeta({
         source: 'wind',
-        summary: '固定观察四大行、招商银行、贵州茅台、长江电力、中国神华。当前估值和股息率来自万得最新行情，股息率曲线来自万得近10年年末股息率。',
+        summary: '固定观察四大行、招商银行、贵州茅台、长江电力、中国神华、中国移动、中国海油。当前估值和股息率来自万得最新行情，股息率曲线来自万得近10年年末股息率，2025分红来自万得年度每股现金分红口径。',
         stocks
     });
 }
