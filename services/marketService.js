@@ -417,10 +417,14 @@ async function fetchWindMacroStatus() {
 
 async function buildStatusIndex(market) {
     const quote = await safeCall(() => sources.fetchQuote(market, setOriginStatus), {});
+    const recentKlines = await safeCall(() => sources.fetchKlines(market, 1, setOriginStatus), []);
     const klines = await safeCall(() => sources.fetchKlines(market, 10, setOriginStatus), []);
     const monthly = downsampleMonthly(klines).slice(-120);
     const latest = monthly[monthly.length - 1] || {};
-    const close = quote.close == null ? latest.close : quote.close;
+    const latestDaily = recentKlines[recentKlines.length - 1] || {};
+    const close = quote.close == null ? (latestDaily.close == null ? latest.close : latestDaily.close) : quote.close;
+    const changePct = quote.changePct == null ? latestDaily.changePct : quote.changePct;
+    const amount = quote.amount == null ? (latestDaily.amount == null ? latest.amount : latestDaily.amount) : quote.amount;
     const first = monthly[0] || {};
     return {
         id: market.id,
@@ -428,8 +432,9 @@ async function buildStatusIndex(market) {
         name: market.name,
         style: market.style,
         close,
-        changePct: quote.changePct,
-        amount: quote.amount || latest.amount || 0,
+        changePct,
+        amount: amount || 0,
+        amountSource: quote.amount == null && latestDaily.amount != null ? 'eastmoney.daily-kline' : 'eastmoney.quote',
         tenYearChangePct: calcChangePct(first.close, close),
         points: monthly.map(item => ({
             date: item.date.slice(0, 7),
@@ -454,10 +459,10 @@ async function buildMarketStatus() {
         note: '全A涨跌家数暂未取到，等待下次回源补齐。',
         history: []
     };
-    const totalTurnover = items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
     const sh = items.find(item => item.id === 'sh000001') || {};
     const sz = items.find(item => item.id === 'sz399001') || {};
     const growth = items.find(item => item.id === 'sz399006') || {};
+    const totalTurnover = (Number(sh.amount) || 0) + (Number(sz.amount) || 0);
     const totalBreadth = Number(breadth.up || 0) + Number(breadth.down || 0) + Number(breadth.flat || 0);
     const downRatio = totalBreadth ? Number(breadth.down || 0) / totalBreadth * 100 : null;
     const macro = await safeCall(fetchWindMacroStatus, null);
