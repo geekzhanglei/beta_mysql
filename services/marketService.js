@@ -464,7 +464,8 @@ async function buildMarketStatus() {
     const growth = items.find(item => item.id === 'sz399006') || {};
     const totalTurnover = (Number(sh.amount) || 0) + (Number(sz.amount) || 0);
     const totalBreadth = Number(breadth.up || 0) + Number(breadth.down || 0) + Number(breadth.flat || 0);
-    const downRatio = totalBreadth ? Number(breadth.down || 0) / totalBreadth * 100 : null;
+    const activeBreadth = Number(breadth.up || 0) + Number(breadth.down || 0);
+    const downRatio = totalBreadth && activeBreadth ? Number(breadth.down || 0) / totalBreadth * 100 : null;
     const macro = await safeCall(fetchWindMacroStatus, null);
 
     return {
