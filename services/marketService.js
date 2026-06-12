@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const {
     getDatasetCache,
+    listRecentDatasetCaches,
     setDatasetCache,
     setOriginStatus,
     listOriginStatus
@@ -22,6 +23,7 @@ const {
 const wind = require('./marketWindProvider');
 
 const DAILY_REFRESH_HOUR = Number(process.env.MARKET_REFRESH_HOUR || 1);
+const backgroundRefreshTasks = new Map();
 
 function pad(value) {
     return String(value).padStart(2, '0');
@@ -1068,32 +1070,79 @@ function isDatasetComplete(cacheKey, payload) {
     return true;
 }
 
-async function withDailyCache(cacheKey, builder) {
-    const key = 'market:' + MARKET_CACHE_VERSION + ':' + cacheKey;
-    const cached = await getDatasetCache(key);
+async function refreshAndStoreDataset(versionedKey, stableKey, cacheKey, builder) {
+    const payload = await builder();
+    if (!isDatasetComplete(cacheKey, payload)) {
+        throw new Error('market dataset incomplete after origin refresh: ' + cacheKey);
+    }
+    const expiresAt = nextRefreshDate();
+    await setDatasetCache(versionedKey, payload, expiresAt);
+    await setDatasetCache(stableKey, payload, expiresAt);
+    return payload;
+}
+
+function runBackgroundRefresh(refreshKey, refreshFn) {
+    if (backgroundRefreshTasks.has(refreshKey)) {
+        return;
+    }
+
+    const task = Promise.resolve()
+        .then(refreshFn)
+        .catch(err => {
+            console.error('[market] background refresh failed', refreshKey, err.message);
+        })
+        .finally(() => {
+            backgroundRefreshTasks.delete(refreshKey);
+        });
+
+    backgroundRefreshTasks.set(refreshKey, task);
+}
+
+function asStalePayload(cacheKey, cached, reason) {
+    return Object.assign({}, cached.payload, {
+        source: 'stale-cache',
+        stale: true,
+        refreshPending: true,
+        staleDatasetKey: cached.datasetKey,
+        staleReason: reason || ('background refresh started: ' + cacheKey)
+    });
+}
+
+async function withDailyCache(cacheKey, builder, options) {
+    const forceRefresh = options && options.forceRefresh;
+    const versionedKey = 'market:' + MARKET_CACHE_VERSION + ':' + cacheKey;
+    const stableKey = 'market:latest:' + cacheKey;
+    const refresh = () => refreshAndStoreDataset(versionedKey, stableKey, cacheKey, builder);
+    const cached = await getDatasetCache(versionedKey);
     const cachedComplete = cached && isDatasetComplete(cacheKey, cached.payload);
+
+    if (forceRefresh) {
+        return refresh();
+    }
 
     if (cached && cached.isFresh && cachedComplete) {
         return Object.assign({}, cached.payload, { source: 'cache' });
     }
 
-    try {
-        const payload = await builder();
-        if (!isDatasetComplete(cacheKey, payload)) {
-            throw new Error('market dataset incomplete after origin refresh: ' + cacheKey);
-        }
-        await setDatasetCache(key, payload, nextRefreshDate());
-        return payload;
-    } catch (err) {
-        if (cachedComplete) {
-            return Object.assign({}, cached.payload, {
-                source: 'stale-cache',
-                stale: true,
-                staleReason: err.message
-            });
-        }
-        throw err;
+    let fallback = cachedComplete ? cached : null;
+    if (!fallback) {
+        const recentCaches = await listRecentDatasetCaches(cacheKey, 8);
+        fallback = recentCaches.find(item => isDatasetComplete(cacheKey, item.payload));
     }
+    const fallbackComplete = fallback && isDatasetComplete(cacheKey, fallback.payload);
+
+    if (fallbackComplete) {
+        runBackgroundRefresh(versionedKey, refresh);
+        return asStalePayload(
+            cacheKey,
+            fallback,
+            cachedComplete
+                ? 'cache expired, background refresh started'
+                : 'using latest successful cached dataset, background refresh started'
+        );
+    }
+
+    return refresh();
 }
 
 function dailyToken() {
@@ -1102,11 +1151,11 @@ function dailyToken() {
 
 module.exports = {
     dailyToken,
-    getOverview: () => withDailyCache('overview', buildOverview),
-    getStyle: () => withDailyCache('style', buildMarketStyle),
-    getFundFlow: () => withDailyCache('style', buildMarketStyle),
-    getCrowding: () => withDailyCache('style', buildMarketStyle),
-    getValue: () => withDailyCache('value', buildValue),
-    getHistory: (id, years) => withDailyCache('history:' + id + ':' + years, () => buildHistory(id, years)),
+    getOverview: options => withDailyCache('overview', buildOverview, options),
+    getStyle: options => withDailyCache('style', buildMarketStyle, options),
+    getFundFlow: options => withDailyCache('style', buildMarketStyle, options),
+    getCrowding: options => withDailyCache('style', buildMarketStyle, options),
+    getValue: options => withDailyCache('value', buildValue, options),
+    getHistory: (id, years, options) => withDailyCache('history:' + id + ':' + years, () => buildHistory(id, years), options),
     getOriginStatus: listOriginStatus
 };

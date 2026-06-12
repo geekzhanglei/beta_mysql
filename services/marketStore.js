@@ -19,6 +19,17 @@ function toMysqlDatetime(date) {
     ].join(':');
 }
 
+function parseCacheRow(row) {
+    const expiresAt = new Date(row.expires_at).getTime();
+    return {
+        datasetKey: row.dataset_key,
+        payload: JSON.parse(row.payload_json),
+        expiresAt,
+        isFresh: expiresAt > Date.now(),
+        updatedAt: row.updated_at
+    };
+}
+
 async function ensureMarketTables() {
     if (schemaReady) {
         return;
@@ -64,7 +75,7 @@ async function getDatasetCache(datasetKey) {
     await ensureMarketTables();
 
     const rows = await query(
-        'SELECT payload_json, expires_at FROM market_dataset_cache WHERE dataset_key = ? LIMIT 1',
+        'SELECT dataset_key, payload_json, expires_at, updated_at FROM market_dataset_cache WHERE dataset_key = ? LIMIT 1',
         [datasetKey]
     );
 
@@ -72,12 +83,28 @@ async function getDatasetCache(datasetKey) {
         return null;
     }
 
-    const expiresAt = new Date(rows[0].expires_at).getTime();
-    return {
-        payload: JSON.parse(rows[0].payload_json),
-        expiresAt,
-        isFresh: expiresAt > Date.now()
-    };
+    return parseCacheRow(rows[0]);
+}
+
+async function listRecentDatasetCaches(cacheKey, limit) {
+    await ensureMarketTables();
+
+    const size = Math.min(Math.max(Number(limit) || 8, 1), 20);
+    const stableKey = 'market:latest:' + cacheKey;
+    const versionedPattern = 'market:%:' + cacheKey;
+    const rows = await query(
+        'SELECT dataset_key, payload_json, expires_at, updated_at FROM market_dataset_cache ' +
+            'WHERE dataset_key = ? OR dataset_key LIKE ? ' +
+            'ORDER BY CASE WHEN dataset_key = ? THEN 0 ELSE 1 END, updated_at DESC LIMIT ' + size,
+        [stableKey, versionedPattern, stableKey]
+    );
+
+    return rows.map(parseCacheRow);
+}
+
+async function getLatestDatasetCache(cacheKey) {
+    const rows = await listRecentDatasetCaches(cacheKey, 1);
+    return rows[0] || null;
 }
 
 async function setDatasetCache(datasetKey, payload, expiresAt) {
@@ -120,6 +147,8 @@ async function listOriginStatus() {
 module.exports = {
     ensureMarketTables,
     getDatasetCache,
+    getLatestDatasetCache,
+    listRecentDatasetCaches,
     setDatasetCache,
     setOriginStatus,
     listOriginStatus

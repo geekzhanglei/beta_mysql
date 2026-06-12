@@ -14,6 +14,7 @@ if (fs.existsSync(serverEnvPath)) {
 }
 
 const { INDEX_MARKETS } = require('../services/marketDefinitions');
+const marketService = require('../services/marketService');
 
 const API_BASE_URL = process.env.MARKET_WARM_API_BASE_URL || 'http://127.0.0.1:3000';
 const REQUEST_TIMEOUT = Number(process.env.MARKET_WARM_REQUEST_TIMEOUT || 120000);
@@ -63,8 +64,13 @@ function requestJson(urlPath) {
     });
 }
 
+function withRefreshToken(urlPath) {
+    const separator = urlPath.indexOf('?') === -1 ? '?' : '&';
+    return urlPath + separator + 'refresh=1&token=' + encodeURIComponent(marketService.dailyToken());
+}
+
 async function warmEndpoint(urlPath) {
-    const data = await requestJson(urlPath);
+    const data = await requestJson(withRefreshToken(urlPath));
     console.log('[market-refresh] ok', urlPath, 'source=' + (data && data.source || 'unknown'));
 }
 

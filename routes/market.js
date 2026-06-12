@@ -18,9 +18,21 @@ function fail(ctx, err) {
     };
 }
 
+function isLocalRequest(ctx) {
+    const ip = String(ctx.ip || ctx.request.ip || '');
+    return ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+}
+
+function cacheOptions(ctx) {
+    const token = String(ctx.query.token || '');
+    return {
+        forceRefresh: ctx.query.refresh === '1' && isLocalRequest(ctx) && token === marketService.dailyToken()
+    };
+}
+
 router.get('/overview', async ctx => {
     try {
-        ok(ctx, await marketService.getOverview());
+        ok(ctx, await marketService.getOverview(cacheOptions(ctx)));
     } catch (err) {
         fail(ctx, err);
     }
@@ -28,7 +40,7 @@ router.get('/overview', async ctx => {
 
 router.get('/fund-flow', async ctx => {
     try {
-        const data = await marketService.getFundFlow();
+        const data = await marketService.getFundFlow(cacheOptions(ctx));
         ok(ctx, data.fundFlow || data);
     } catch (err) {
         fail(ctx, err);
@@ -37,7 +49,7 @@ router.get('/fund-flow', async ctx => {
 
 router.get('/crowding', async ctx => {
     try {
-        const data = await marketService.getCrowding();
+        const data = await marketService.getCrowding(cacheOptions(ctx));
         ok(ctx, data.crowding || data);
     } catch (err) {
         fail(ctx, err);
@@ -46,7 +58,7 @@ router.get('/crowding', async ctx => {
 
 router.get('/consensus', async ctx => {
     try {
-        const data = await marketService.getStyle();
+        const data = await marketService.getStyle(cacheOptions(ctx));
         ok(ctx, {
             source: data.source,
             updatedAt: data.updatedAt,
@@ -60,7 +72,7 @@ router.get('/consensus', async ctx => {
 
 router.get('/style', async ctx => {
     try {
-        ok(ctx, await marketService.getStyle());
+        ok(ctx, await marketService.getStyle(cacheOptions(ctx)));
     } catch (err) {
         fail(ctx, err);
     }
@@ -68,7 +80,7 @@ router.get('/style', async ctx => {
 
 router.get('/value', async ctx => {
     try {
-        ok(ctx, await marketService.getValue());
+        ok(ctx, await marketService.getValue(cacheOptions(ctx)));
     } catch (err) {
         fail(ctx, err);
     }
@@ -86,7 +98,7 @@ router.get('/history', async ctx => {
     try {
         const id = String(ctx.query.id || 'csi300');
         const years = Math.min(Math.max(Number(ctx.query.years || 10), 1), 10);
-        ok(ctx, await marketService.getHistory(id, years));
+        ok(ctx, await marketService.getHistory(id, years, cacheOptions(ctx)));
     } catch (err) {
         fail(ctx, err);
     }
