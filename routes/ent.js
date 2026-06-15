@@ -150,6 +150,10 @@ function makeCacheKey(name, params) {
     return name + ':' + query;
 }
 
+function shouldWaitForStaleRefresh(ctx) {
+    return String(ctx.request.query.waitRefresh || '') === '1';
+}
+
 function withTimeout(promise, timeoutMs) {
     return new Promise((resolve, reject) => {
         const timer = setTimeout(() => {
@@ -189,6 +193,10 @@ function runRefreshTask(cacheKey, refreshFn) {
     return task;
 }
 
+function detachRefreshTask(task) {
+    task.catch(() => {});
+}
+
 async function getCachedTmdbPayload(cacheKey, apiPath, params, ttlSeconds, options) {
     const cached = await getApiCacheEntry(cacheKey);
     const refreshPayload = async () => {
@@ -215,21 +223,30 @@ async function getCachedTmdbPayload(cacheKey, apiPath, params, ttlSeconds, optio
     if (cached && !(options && options.forceRefresh)) {
         const refreshTask = runRefreshTask(cacheKey, refreshPayload);
 
-        try {
-            return await withTimeout(refreshTask, STALE_REFRESH_TIMEOUT);
-        } catch (err) {
-            return {
-                source: 'stale-cache',
-                payload: cached.payload,
-                refreshPending: true
-            };
+        if (options && options.waitForStaleRefresh) {
+            try {
+                return await withTimeout(refreshTask, STALE_REFRESH_TIMEOUT);
+            } catch (err) {
+                return {
+                    source: 'stale-cache',
+                    payload: cached.payload,
+                    refreshPending: true
+                };
+            }
         }
+
+        detachRefreshTask(refreshTask);
+        return {
+            source: 'stale-cache',
+            payload: cached.payload,
+            refreshPending: true
+        };
     }
 
     return refreshPayload();
 }
 
-async function getCachedResponsePayload(cacheKey, createPayload, ttlSeconds) {
+async function getCachedResponsePayload(cacheKey, createPayload, ttlSeconds, options) {
     const cached = await getApiCacheEntry(cacheKey);
     const refreshPayload = async () => {
         const payload = await createPayload();
@@ -251,15 +268,24 @@ async function getCachedResponsePayload(cacheKey, createPayload, ttlSeconds) {
     if (cached) {
         const refreshTask = runRefreshTask(cacheKey, refreshPayload);
 
-        try {
-            return await withTimeout(refreshTask, STALE_REFRESH_TIMEOUT);
-        } catch (err) {
-            return {
-                source: 'stale-cache',
-                payload: cached.payload,
-                refreshPending: true
-            };
+        if (options && options.waitForStaleRefresh) {
+            try {
+                return await withTimeout(refreshTask, STALE_REFRESH_TIMEOUT);
+            } catch (err) {
+                return {
+                    source: 'stale-cache',
+                    payload: cached.payload,
+                    refreshPending: true
+                };
+            }
         }
+
+        detachRefreshTask(refreshTask);
+        return {
+            source: 'stale-cache',
+            payload: cached.payload,
+            refreshPending: true
+        };
     }
 
     return refreshPayload();
@@ -355,6 +381,7 @@ function mergePagedPayloads(payloads) {
 async function listHandler(ctx, options) {
     try {
         const cachedResult = await getCachedTmdbPayload(options.cacheKey, options.apiPath, options.params, options.ttl, {
+            waitForStaleRefresh: shouldWaitForStaleRefresh(ctx),
             onRefreshPayload: async payload => {
                 const items = Array.isArray(payload.results) ? payload.results : [];
 
@@ -432,7 +459,9 @@ async function getMovieListResponse(options) {
 
         normalized.scannedPages = MOVIE_PAGE_LIMIT;
         return normalized;
-    }, options.ttl);
+    }, options.ttl, {
+        waitForStaleRefresh: !!options.waitForStaleRefresh
+    });
 }
 
 async function getTvCalendarPayload(params, date, ttlSeconds) {
@@ -705,6 +734,7 @@ router.get('/movies/now-playing', async ctx => {
             params,
             ttl: TTL.TODAY,
             sortMode: 'rating',
+            waitForStaleRefresh: shouldWaitForStaleRefresh(ctx),
             calendar: {
                 mediaType: 'movie',
                 eventType: 'now_playing',
@@ -730,6 +760,7 @@ router.get('/movies/upcoming', async ctx => {
             params,
             ttl: TTL.LIST,
             sortMode: 'date',
+            waitForStaleRefresh: shouldWaitForStaleRefresh(ctx),
             calendar: {
                 mediaType: 'movie',
                 eventType: 'upcoming',
@@ -753,7 +784,8 @@ router.get('/movies/trending', async ctx => {
             cacheName: 'movie_trending_' + window,
             params,
             ttl: TTL.TRENDING,
-            sortMode: 'rating'
+            sortMode: 'rating',
+            waitForStaleRefresh: shouldWaitForStaleRefresh(ctx)
         });
 
         ok(ctx, result.payload, result.source);
@@ -883,7 +915,9 @@ router.get('/tv/episode-calendar', async ctx => {
                 episodeResolvedCount: list.filter(item => item.hasEpisode).length,
                 list: list.map(item => markCalendarItem(item, date, params.timezone))
             };
-        }, responseTtl);
+        }, responseTtl, {
+            waitForStaleRefresh: shouldWaitForStaleRefresh(ctx)
+        });
 
         ok(ctx, responseResult.payload, responseResult.source);
     } catch (err) {

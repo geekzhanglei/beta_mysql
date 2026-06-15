@@ -22,6 +22,7 @@ const WARM_DAYS = Number(process.env.TMDB_WARM_DAYS || 7);
 const IMAGE_LIMIT_PER_ENDPOINT = Number(process.env.TMDB_WARM_IMAGE_LIMIT || 12);
 const REQUEST_TIMEOUT = Number(process.env.TMDB_WARM_REQUEST_TIMEOUT || 20000);
 const EPISODE_LIMIT = Number(process.env.TMDB_WARM_EPISODE_LIMIT || 40);
+const WAIT_REFRESH = process.env.TMDB_WARM_WAIT_REFRESH !== '0';
 
 function pad(num) {
     return String(num).padStart(2, '0');
@@ -40,6 +41,14 @@ function dateValue(offset) {
 
 function buildUrl(urlPath) {
     return API_BASE_URL + urlPath;
+}
+
+function withWarmQuery(urlPath) {
+    if (!WAIT_REFRESH) {
+        return urlPath;
+    }
+
+    return urlPath + (urlPath.indexOf('?') === -1 ? '?' : '&') + 'waitRefresh=1';
 }
 
 function requestUrl(url) {
@@ -114,7 +123,7 @@ function collectImages(payload) {
 }
 
 async function warmEndpoint(urlPath) {
-    const payload = await requestJson(urlPath);
+    const payload = await requestJson(withWarmQuery(urlPath));
     const images = collectImages(payload);
 
     for (let i = 0; i < images.length; i++) {
